@@ -5,7 +5,7 @@ export const AVAILABLE_TOOLS: ToolDefinition[] = [
     id: 'web_search',
     name: 'web_search',
     displayName: 'Web Search',
-    description: 'Search the live web and return real-time result titles, snippets, and URLs. Use this for any question about current events, prices, weather, news, or anything that requires up-to-date information. When the snippet is insufficient, call read_url on the most relevant result URL to get the full page content.',
+    description: 'Search the live web and return real-time result titles, snippets, and URLs. Use this for any question about current events, prices, weather, news, or anything that requires up-to-date information.',
     icon: 'globe',
     requiresNetwork: true,
     parameters: {
@@ -83,6 +83,45 @@ export const AVAILABLE_TOOLS: ToolDefinition[] = [
         type: 'string',
         description: 'Full URL to fetch',
         required: true,
+      },
+    },
+  },
+  {
+    id: 'github_connect',
+    name: 'github_connect',
+    displayName: 'GitHub OAuth',
+    description: 'Connect to GitHub via OAuth device flow to authenticate and push files to repositories',
+    icon: 'github',
+    requiresNetwork: true,
+    parameters: {
+      action: {
+        type: 'string',
+        description: 'OAuth action',
+        enum: ['authenticate', 'push_file', 'get_token', 'logout'],
+      },
+      owner: {
+        type: 'string',
+        description: 'Repository owner (username or organization)',
+      },
+      repo: {
+        type: 'string',
+        description: 'Repository name',
+      },
+      file_path: {
+        type: 'string',
+        description: 'Path to file in repository (e.g., src/index.ts)',
+      },
+      content: {
+        type: 'string',
+        description: 'File content to push',
+      },
+      commit_message: {
+        type: 'string',
+        description: 'Git commit message',
+      },
+      branch: {
+        type: 'string',
+        description: 'Target branch (default: main)',
       },
     },
   },
