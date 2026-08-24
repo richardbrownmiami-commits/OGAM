@@ -1,5 +1,5 @@
 name: Dev APK
-on:on
+on:
   push:
     branches: [dev]
 
