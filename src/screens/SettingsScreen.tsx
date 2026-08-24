@@ -1,370 +1,183 @@
-import React, { useEffect, useState } from 'react';
-import {
-  View,
-  Text,
-  ScrollView,
-  TouchableOpacity,
-  Linking,
-  Alert,
-} from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import Icon from 'react-native-vector-icons/Feather';
-import IconMC from 'react-native-vector-icons/MaterialCommunityIcons';
-import {
-  useNavigation,
-  CommonActions,
-  CompositeNavigationProp,
-} from '@react-navigation/native';
-import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
-import { Card } from '../components';
-import { createStyles } from './SettingsScreen.styles';
-import { SettingsAppearanceRow } from './SettingsAppearanceRow';
-import { SettingsCommunitySections } from './SettingsCommunitySections';
-import { AnimatedEntry } from '../components/AnimatedEntry';
-import { AnimatedListItem } from '../components/AnimatedListItem';
-import { MadeWithLove } from '../components/MadeWithLove';
-import { DebugLogsScreen } from '../components/DebugLogsScreen';
-import { useSettingsSections } from '../components/settings/sectionRegistry';
-import { ProUpsellBanner } from '../components/settings/ProUpsellBanner';
-import { useFocusTrigger } from '../hooks/useFocusTrigger';
-import { useTheme, useThemedStyles } from '../theme';
+import React, { useState, useEffect } from 'react';
+import { View, Text, ScrollView, TouchableOpacity, Switch, StyleSheet, Image, Modal, TextInput, FlatList, Alert } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import RNFS from 'react-native-fs';
-import { useAppStore, useRemoteServerStore } from '../stores';
-import { hardwareService } from '../services';
-import { RootStackParamList, MainTabParamList } from '../navigation/types';
-import { useHasRegisteredScreen } from '../navigation/screenRegistry';
-import { clearProForTesting } from '../services/proLicenseService';
-import { useProStatusLabel } from '../hooks/useProStatusLabel';
-import { useOpenSync } from '../hooks/useOpenSync';
-import { appBuildLabel, appVersion } from '../utils/appVersion';
 
-const FEEDBACK_EMAIL = 'support@offgridmobileai.co';
+export default function SettingsScreen() {
+  const [githubUser, setGithubUser] = useState<any>(null);
+  const [githubToken, setGithubToken] = useState<string|null>(null);
+  const [showPatModal, setShowPatModal] = useState(false);
+  const [patInput, setPatInput] = useState('');
+  const [toggles, setToggles] = useState({ internet: true, webSearch: true, ghClone: false, remoteModels: false, ghControl: true, listRepos: true, createPR: true, createIssue: false, clone: false, ghost: true, worker: true, boss: true, workflow: true, multiAgent: false });
+  const [logs, setLogs] = useState<any[]>([]);
+  const [basementVisible, setBasementVisible] = useState(false);
+  const [taskStatus, setTaskStatus] = useState<any>(null);
 
-type NavigationProp = CompositeNavigationProp<
-  BottomTabNavigationProp<MainTabParamList, 'SettingsTab'>,
-  NativeStackNavigationProp<RootStackParamList>
->;
+  useEffect(() => { loadAll(); }, []);
 
-export const SettingsScreen: React.FC = () => {
-  const navigation = useNavigation<NavigationProp>();
-  const focusTrigger = useFocusTrigger();
-  const { colors } = useTheme();
-  const styles = useThemedStyles(createStyles);
-  // Reactive: Pro sections registered at runtime (license-key activation re-runs
-  // loadProFeatures) show up live without an app restart.
-  const settingsSections = useSettingsSections();
-  const hasSync = useHasRegisteredScreen('Sync');
-  const { isSyncUnlocked, openSync } = useOpenSync();
-  const setOnboardingComplete = useAppStore(s => s.setOnboardingComplete);
-  const themeMode = useAppStore(s => s.themeMode);
-  const setThemeMode = useAppStore(s => s.setThemeMode);
-  const completeChecklistStep = useAppStore(s => s.completeChecklistStep);
-  const [showDebugLogs, setShowDebugLogs] = useState(false);
-  const deviceInfo = useAppStore(s => s.deviceInfo);
-  // Hidden once the user dismisses it, or once Pro is active (the upsell makes no
-  // sense to a paid user). hasRegisteredPro only flips true after RC verification
-  // (activateProByEmail / revalidatePro), so this also covers "paid and verified".
-  const devProDisabled = useAppStore(s => s.devProDisabled);
-  const setDevProDisabled = useAppStore(s => s.setDevProDisabled);
-  const setHasRegisteredPro = useAppStore(s => s.setHasRegisteredPro);
-  const { proStatusLabel } = useProStatusLabel();
-
-  useEffect(() => {
-    completeChecklistStep('exploredSettings');
-  }, [completeChecklistStep]);
-
-  const handleSendFeedback = async () => {
-    const { downloadedModels, activeModelId } = useAppStore.getState();
-    const { activeServerId } = useRemoteServerStore.getState();
-
-    const fsInfo = await RNFS.getFSInfo();
-
-    const ramGB = hardwareService.getTotalMemoryGB().toFixed(1);
-    const tier = hardwareService.getDeviceTier();
-    const freeGB = (fsInfo.freeSpace / (1024 * 1024 * 1024)).toFixed(1);
-    const activeModel = downloadedModels.find(m => m.id === activeModelId);
-    const modelLine = activeModel ? activeModel.fileName : 'None';
-    const remoteServer = activeServerId ? 'Yes' : 'No';
-    const deviceLine = deviceInfo
-      ? `Device: ${deviceInfo.deviceModel} (${deviceInfo.systemName} ${deviceInfo.systemVersion})`
-      : 'Device: Unknown';
-
-    const subject = encodeURIComponent(
-      `[Feedback] Off Grid AI v${appVersion()}`,
-    );
-    const body = encodeURIComponent(
-      `Hi,\n\n[Describe your feedback or issue here]\n\n` +
-        `---\n` +
-        `App: ${appBuildLabel()}\n` +
-        `${deviceLine}\n` +
-        `RAM: ${ramGB} GB · Tier: ${tier}\n` +
-        `Model: ${modelLine}\n` +
-        `Free storage: ${freeGB} GB\n` +
-        `Remote server: ${remoteServer}`,
-    );
-    const url = `mailto:${FEEDBACK_EMAIL}?subject=${subject}&body=${body}`;
+  const loadAll = async () => {
+    const token = await AsyncStorage.getItem('github_token');
+    const username = await AsyncStorage.getItem('github_username');
+    if (token) setGithubToken(token);
+    if (username && token) {
+      try {
+        const r = await fetch('https://api.github.com/user', { headers: { Authorization: `token ${token}` } });
+        const u = await r.json();
+        if (u.login) setGithubUser(u);
+      } catch {}
+    }
+    const saved = await AsyncStorage.getItem('ogam_toggles');
+    if (saved) setToggles(JSON.parse(saved));
     try {
-      await Linking.openURL(url);
-    } catch {
-      Alert.alert(
-        'Could Not Open Mail',
-        `Looks like there was an issue. You can reach out to us at ${FEEDBACK_EMAIL}`,
-        [{ text: 'OK' }],
-      );
-    }
+      const p = RNFS.DocumentDirectoryPath + '/actions.json';
+      if (await RNFS.exists(p)) { const c = await RNFS.readFile(p, 'utf8'); setLogs(JSON.parse(c).slice(-50).reverse()); }
+      const tp = RNFS.DocumentDirectoryPath + '/task_status.json';
+      if (await RNFS.exists(tp)) { const tc = await RNFS.readFile(tp, 'utf8'); setTaskStatus(JSON.parse(tc)); }
+    } catch {}
   };
 
-  // DEV-only: flip the Pro auto-unlock. Disabling also clears the cached license
-  // so the build behaves like a fresh free install. We flip the store flags
-  // synchronously (so the UI drops Pro immediately) and do NOT auto-reload —
-  // an immediate reload races the async persist write and rehydrates the old
-  // Pro-active state. A manual restart applies feature load/unload (slots
-  // registered at boot can't be cleanly torn down at runtime).
-  const handleToggleDevPro = async () => {
-    const disabling = !devProDisabled;
-    if (disabling) {
-      setDevProDisabled(true);
-      await clearProForTesting();
-      setHasRegisteredPro(false);
-    } else {
-      setDevProDisabled(false);
+  const saveToggles = async (n:any) => { setToggles(n); await AsyncStorage.setItem('ogam_toggles', JSON.stringify(n)); };
+
+  const savePat = async () => {
+    const pat = patInput.trim();
+    if (!pat) return;
+    if (!pat.startsWith('ghp_') && !pat.startsWith('github_pat_') && !pat.startsWith('gh_')) {
+      Alert.alert('Invalid', 'Token must start with ghp_, github_pat_, or gh_'); return;
     }
-    Alert.alert(
-      disabling ? 'Pro disabled (DEV)' : 'Pro enabled (DEV)',
-      `Restart the app to fully ${disabling ? 'unload' : 'load'} Pro features.`,
-    );
+    try {
+      const res = await fetch('https://api.github.com/user', { headers: { Authorization: `token ${pat}` } });
+      const user = await res.json();
+      if (!user.login) { Alert.alert('Failed', user.message || 'Invalid token'); return; }
+      // SAVE AS SSECRET - only on phone, never in repo
+      await AsyncStorage.setItem('github_token', pat);
+      await AsyncStorage.setItem('github_username', user.login);
+      setGithubUser(user); setGithubToken(pat); setShowPatModal(false); setPatInput('');
+      Alert.alert('Connected', `@${user.login} connected`);
+    } catch (e) { Alert.alert('Error', 'Check internet'); }
   };
 
-  const handleResetOnboarding = () => {
-    setOnboardingComplete(false);
-    // Navigate to root stack and reset to Onboarding
-    // getParent() reaches the RootStack from inside the Tab navigator
-    navigation.getParent()?.dispatch(
-      CommonActions.reset({
-        index: 0,
-        routes: [{ name: 'Onboarding' }],
-      }),
-    );
+  const disconnect = async () => {
+    await AsyncStorage.removeItem('github_token');
+    await AsyncStorage.removeItem('github_username');
+    setGithubUser(null); setGithubToken(null);
   };
+
+  const ToggleRow = ({ label, value, onValueChange, isSub }: any) => (
+    <View style={[styles.toggleRow, isSub && styles.subRow]}>
+      <Text style={[styles.toggleLabel, isSub && styles.subLabel]}>{label}</Text>
+      <Switch value={value} onValueChange={onValueChange} trackColor={{ true: '#22c55e' }} thumbColor="#fff" />
+    </View>
+  );
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
-      <View style={styles.header}>
-        <Text style={styles.title}>Settings</Text>
-      </View>
-      <ScrollView
-        style={styles.scrollView}
-        contentContainerStyle={styles.content}
-      >
-        {/* PRO Banner */}
-        <ProUpsellBanner
-          trigger={focusTrigger}
-          onGetPro={() => navigation.navigate('ProDetail')}
-        />
+    <View style={styles.container}>
+      <ScrollView contentContainerStyle={{ padding: 16 }}>
+        <Text style={styles.headerTitle}>OGAM AI STUDIO Settings</Text>
 
-        <SettingsAppearanceRow
-          focusTrigger={focusTrigger}
-          styles={styles}
-          colors={colors}
-          themeMode={themeMode}
-          onSelect={setThemeMode}
-        />
-
-        {/* Navigation Items */}
-          <View style={styles.navSection}>
-            {[
-              {
-                icon: 'sliders',
-                title: 'Model Settings',
-                desc: 'System prompt, generation, and performance',
-                screen: 'ModelSettings' as const,
-                testID: 'open-model-settings',
-              },
-              {
-                icon: 'wifi',
-                title: 'Remote Servers',
-                desc: 'Connect to Off Grid AI Desktop, Ollama, LM Studio, and more',
-                screen: 'RemoteServers' as const,
-              },
-              ...(hasSync
-                ? [
-                    {
-                      icon: 'refresh-cw',
-                      title: isSyncUnlocked ? 'Sync' : 'Sync with Pro',
-                      desc: isSyncUnlocked
-                        ? 'Chats, projects, files, and copied text across your devices'
-                        : 'Get Pro to set up encrypted Sync across your devices',
-                      screen: 'Sync' as const,
-                      testID: 'open-sync-settings',
-                    },
-                  ]
-                : []),
-              //  { icon: 'search', title: 'Web Search', desc: 'Configure search API key for reliable results', screen: 'WebSearchSettings' as const },
-              {
-                icon: 'lock',
-                title: 'Security',
-                desc: 'Passphrase and app lock',
-                screen: 'SecuritySettings' as const,
-              },
-              {
-                icon: 'smartphone',
-                title: 'Device Information',
-                desc: 'Hardware and compatibility',
-                screen: 'DeviceInfo' as const,
-              },
-              {
-                icon: 'hard-drive',
-                title: 'Storage',
-                desc: 'Models and data usage',
-                screen: 'StorageSettings' as const,
-              },
-            ].map((item, index, arr) => (
-              <AnimatedListItem
-                key={item.screen}
-                index={index + 1}
-                staggerMs={40}
-                trigger={focusTrigger}
-                style={[
-                  styles.navItem,
-                  index === arr.length - 1 && styles.navItemLast,
-                ]}
-                onPress={() =>
-                  item.screen === 'Sync'
-                    ? openSync()
-                    : navigation.navigate(item.screen)
-                }
-                testID={'testID' in item ? item.testID : undefined}
-              >
-                <View style={styles.navItemIcon}>
-                  <Icon
-                    name={item.icon}
-                    size={16}
-                    color={colors.textSecondary}
-                  />
-                </View>
-                <View style={styles.navItemContent}>
-                  <Text style={styles.navItemTitle}>{item.title}</Text>
-                  <Text style={styles.navItemDesc}>{item.desc}</Text>
-                </View>
-                <Icon name="chevron-right" size={16} color={colors.textMuted} />
-              </AnimatedListItem>
-            ))}
+        {/* GITHUB PAT CARD */}
+        <View style={styles.card}>
+          <View style={styles.cardHeader}>
+            <Text style={styles.cardTitle}>{githubUser ? 'GitHub Connected' : 'Connect GitHub'}</Text>
+            {githubUser && <View style={styles.activeBadge}><Text style={styles.activeText}>● Active</Text></View>}
           </View>
-
-        {/* PRO Button */}
-        <AnimatedEntry index={6} staggerMs={40} trigger={focusTrigger}>
-          <TouchableOpacity
-            style={styles.proNavButton}
-            onPress={() => navigation.navigate('ProDetail')}
-            activeOpacity={0.75}
-          >
-            <View style={styles.proIconContainer}>
-              <IconMC name="crown" size={18} color={colors.primary} />
+          {githubUser ? (
+            <View style={styles.githubRow}>
+              <Image source={{ uri: githubUser.avatar_url }} style={styles.avatar} />
+              <View style={{ flex: 1, marginLeft: 12 }}>
+                <Text style={styles.username}>@{githubUser.login}</Text>
+                <Text style={styles.subText}>{githubUser.public_repos} repos • PAT</Text>
+              </View>
+              <TouchableOpacity style={styles.disconnectBtn} onPress={disconnect}><Text style={styles.redText}>Disconnect</Text></TouchableOpacity>
             </View>
-            <View style={styles.proCardText}>
-              <View style={styles.proTitleRow}>
-                <Text style={styles.proNavTitle}>Off Grid AI PRO</Text>
-                <View style={styles.proBadge}>
-                  <Text style={styles.proBadgeText}>PRO</Text>
-                </View>
-              </View>
-              <Text style={styles.proDesc}>{proStatusLabel}</Text>
-            </View>
-            <Icon name="chevron-right" size={16} color={colors.textMuted} />
-          </TouchableOpacity>
-        </AnimatedEntry>
-
-        <SettingsCommunitySections
-          focusTrigger={focusTrigger}
-          styles={styles}
-          colors={colors}
-          onSendFeedback={handleSendFeedback}
-        />
-
-        {/* About */}
-        <AnimatedEntry index={9} staggerMs={40} trigger={focusTrigger}>
-          <View style={styles.navSection}>
-            <TouchableOpacity
-              style={[styles.navItem, styles.navItemLast]}
-              onPress={() => navigation.navigate('About')}
-            >
-              <View style={styles.navItemIcon}>
-                <Icon name="info" size={16} color={colors.textSecondary} />
-              </View>
-              <View style={styles.navItemContent}>
-                <Text style={styles.navItemTitle}>About</Text>
-                <Text style={styles.navItemDesc}>
-                  Version {appVersion()}
-                </Text>
-              </View>
-              <Icon name="chevron-right" size={16} color={colors.textMuted} />
+          ) : (
+            <TouchableOpacity style={styles.connectBtn} onPress={() => setShowPatModal(true)}>
+              <Text style={styles.connectText}>🔗 Connect with GitHub PAT</Text>
             </TouchableOpacity>
-          </View>
-        </AnimatedEntry>
+          )}
+        </View>
 
-        {/* Privacy */}
-        <AnimatedEntry index={10} staggerMs={40} trigger={focusTrigger}>
-          <Card style={styles.privacyCard}>
-            <View style={styles.privacyIconContainer}>
-              <Icon name="shield" size={18} color={colors.textSecondary} />
-            </View>
-            <Text style={styles.privacyTitle}>Privacy First</Text>
-            <Text style={styles.privacyText}>
-              All your data stays on this device. No conversations, prompts, or
-              personal information is ever sent to any server.
-            </Text>
-          </Card>
-        </AnimatedEntry>
+        <Text style={styles.sectionLabel}>INTERNET CONTROL</Text>
+        <View style={styles.card}>
+          <ToggleRow label="🌐 Internet Control" value={toggles.internet} onValueChange={(v:any)=>saveToggles({...toggles, internet:v})} />
+          <ToggleRow label="🔍 Web Search" value={toggles.webSearch} onValueChange={(v:any)=>saveToggles({...toggles, webSearch:v})} isSub />
+          <ToggleRow label="📥 GitHub Clone" value={toggles.ghClone} onValueChange={(v:any)=>saveToggles({...toggles, ghClone:v})} isSub />
+        </View>
 
-        {/* Pro feature sections registered at runtime by @offgrid/pro */}
-        {settingsSections.map((Section, i) => (
-          <Section key={Section.displayName ?? String(i)} />
-        ))}
+        <Text style={styles.sectionLabel}>GITHUB CONTROL</Text>
+        <View style={styles.card}>
+          <ToggleRow label="GitHub Control" value={toggles.ghControl} onValueChange={(v:any)=>saveToggles({...toggles, ghControl:v})} />
+          <ToggleRow label="List Repos" value={toggles.listRepos} onValueChange={(v:any)=>saveToggles({...toggles, listRepos:v})} isSub />
+          <ToggleRow label="Create PR" value={toggles.createPR} onValueChange={(v:any)=>saveToggles({...toggles, createPR:v})} isSub />
+          <ToggleRow label="Create Issue" value={toggles.createIssue} onValueChange={(v:any)=>saveToggles({...toggles, createIssue:v})} isSub />
+          <ToggleRow label="Clone" value={toggles.clone} onValueChange={(v:any)=>saveToggles({...toggles, clone:v})} isSub />
+        </View>
 
-        {/* Dev-only tooling — stripped from release builds */}
-        {__DEV__ && (
-          <AnimatedEntry index={11} staggerMs={40} trigger={focusTrigger}>
-            <View style={styles.devButtonGroup}>
-              <TouchableOpacity
-                style={styles.devButton}
-                onPress={handleResetOnboarding}
-              >
-                <Icon name="rotate-ccw" size={14} color={colors.textMuted} />
-                <Text style={styles.devButtonText}>Reset Onboarding</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.devButton}
-                onPress={() => setShowDebugLogs(true)}
-              >
-                <Icon name="terminal" size={14} color={colors.textMuted} />
-                <Text style={styles.devButtonText}>Debug Logs</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.devButton}
-                onPress={handleToggleDevPro}
-              >
-                <Icon
-                  name={devProDisabled ? 'unlock' : 'lock'}
-                  size={14}
-                  color={colors.textMuted}
-                />
-                <Text style={styles.devButtonText}>
-                  {devProDisabled ? 'Turn on Pro (DEV)' : 'Turn off Pro (DEV)'}
-                </Text>
-              </TouchableOpacity>
-            </View>
-          </AnimatedEntry>
-        )}
+        <Text style={styles.sectionLabel}>HEARTBEAT & GHOST</Text>
+        <View style={styles.card}>
+          <ToggleRow label="Heartbeat & Ghost Control" value={toggles.ghost} onValueChange={(v:any)=>saveToggles({...toggles, ghost:v})} />
+          {taskStatus?.status==='WORKING' && <Text style={styles.working}>WORKING • {taskStatus.progress||45}% - {taskStatus.current||'cloning...'}</Text>}
+          <ToggleRow label="Worker Heartbeat" value={toggles.worker} onValueChange={(v:any)=>saveToggles({...toggles, worker:v})} isSub />
+          <ToggleRow label="Boss Heartbeat" value={toggles.boss} onValueChange={(v:any)=>saveToggles({...toggles, boss:v})} isSub />
+        </View>
 
-        <MadeWithLove />
-        {__DEV__ && (
-          <DebugLogsScreen
-            visible={showDebugLogs}
-            onClose={() => setShowDebugLogs(false)}
-          />
-        )}
+        <Text style={styles.sectionLabel}>LOG UI</Text>
+        <View style={[styles.card, { backgroundColor: '#111' }]}>
+          <FlatList data={logs.length?logs:[{msg:'scaffold created',ok:true},{msg:'clone failed - no internet',ok:false}]} 
+            renderItem={({item}:any)=><Text style={{color:item.ok?'#22c55e':'#ef4444',fontFamily:'monospace',fontSize:12}}>{item.ok?'✓':'✗'} {item.msg||item.action}</Text>} keyExtractor={(_,i)=>i.toString()} scrollEnabled={false} />
+          <TouchableOpacity style={styles.basementBtn} onPress={()=>setBasementVisible(true)}><Text style={{color:'#fff',fontWeight:'700'}}>🏚️ App Basement</Text></TouchableOpacity>
+        </View>
+
+        <Text style={styles.footer}>Terms • Privacy • About • v1.4.2 (42)</Text>
       </ScrollView>
-    </SafeAreaView>
+
+      {/* PAT MODAL - SSECRET INPUT */}
+      <Modal visible={showPatModal} transparent animationType="fade">
+        <View style={styles.modalBg}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>Enter GitHub PAT</Text>
+            <Text style={styles.modalSub}>Create at: github.com → Settings → Developer settings → Personal access tokens → Tokens (classic) → Generate → check repo. This token is saved only on this device, never in repo.</Text>
+            <TextInput value={patInput} onChangeText={setPatInput} placeholder="ghp_xxxxxxxxxxxxxxxx" placeholderTextColor="#555" style={styles.input} secureTextEntry autoCapitalize="none" autoCorrect={false} />
+            <TouchableOpacity style={styles.connectBtn} onPress={savePat}><Text style={styles.connectText}>Save Secret & Connect</Text></TouchableOpacity>
+            <TouchableOpacity onPress={()=>setShowPatModal(false)} style={{alignItems:'center',marginTop:12}}><Text style={{color:'#888'}}>Cancel</Text></TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* BASEMENT MODAL INSIDE SAME FILE */}
+      <Modal visible={basementVisible} animationType="slide">
+        <View style={[styles.container,{padding:16}]}>
+          <View style={{flexDirection:'row',justifyContent:'space-between'}}><Text style={styles.headerTitle}>🏚️ APP BASEMENT</Text><TouchableOpacity onPress={()=>setBasementVisible(false)}><Text style={{color:'#fff'}}>Close</Text></TouchableOpacity></View>
+          <ScrollView><Text style={styles.sectionLabel}>Task</Text><View style={styles.card}><Text style={{color:'#888',fontFamily:'monospace'}}>{JSON.stringify(taskStatus||{status:'idle'},null,2)}</Text></View></ScrollView>
+        </View>
+      </Modal>
+    </View>
   );
-};
+}
+
+const styles = StyleSheet.create({
+  container:{flex:1,backgroundColor:'#0A0A0A'}, headerTitle:{color:'#fff',fontSize:22,fontWeight:'800',marginBottom:12},
+  sectionLabel:{color:'#888',fontSize:11,fontWeight:'700',marginTop:16,marginBottom:6,letterSpacing:1},
+  card:{backgroundColor:'#1A1A1A',borderRadius:16,padding:14,marginBottom:4},
+  cardHeader:{flexDirection:'row',justifyContent:'space-between',alignItems:'center'},
+  cardTitle:{color:'#fff',fontWeight:'700',fontSize:16},
+  activeBadge:{backgroundColor:'#052e16',paddingHorizontal:10,paddingVertical:4,borderRadius:12,borderWidth:1,borderColor:'#16a34a'},
+  activeText:{color:'#22c55e',fontSize:11,fontWeight:'700'},
+  githubRow:{flexDirection:'row',alignItems:'center',marginTop:12},
+  avatar:{width:44,height:44,borderRadius:22,backgroundColor:'#333'},
+  username:{color:'#fff',fontWeight:'700'}, subText:{color:'#888',fontSize:12},
+  connectBtn:{backgroundColor:'#fff',padding:14,borderRadius:12,alignItems:'center',marginTop:12},
+  connectText:{color:'#000',fontWeight:'800'},
+  disconnectBtn:{borderWidth:1,borderColor:'#333',padding:8,borderRadius:8,marginLeft:8},
+  redText:{color:'#ef4444',fontSize:12,fontWeight:'700'},
+  toggleRow:{flexDirection:'row',justifyContent:'space-between',alignItems:'center',paddingVertical:10,borderBottomWidth:0.5,borderColor:'#222'},
+  subRow:{marginLeft:16,backgroundColor:'#222',borderRadius:8,paddingHorizontal:12,marginVertical:2},
+  toggleLabel:{color:'#fff',fontWeight:'600'}, subLabel:{fontSize:13,color:'#ccc'},
+  working:{color:'#f97316',fontSize:11,fontWeight:'700',marginTop:4},
+  basementBtn:{backgroundColor:'#333',padding:10,borderRadius:8,alignItems:'center',marginTop:12},
+  modalBg:{flex:1,backgroundColor:'rgba(0,0,0,0.85)',justifyContent:'center',padding:20},
+  modalCard:{backgroundColor:'#1A1A1A',borderRadius:16,padding:20},
+  modalTitle:{color:'#fff',fontWeight:'800',fontSize:16},
+  modalSub:{color:'#888',fontSize:11,marginTop:6,lineHeight:14},
+  input:{backgroundColor:'#0A0A0A',borderWidth:1,borderColor:'#333',borderRadius:10,padding:14,color:'#fff',marginTop:12},
+  footer:{color:'#555',textAlign:'center',marginVertical:20,fontSize:11}
+});
