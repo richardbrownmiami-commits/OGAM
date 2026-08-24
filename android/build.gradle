@@ -1,40 +1,79 @@
-buildscript {
-    ext {
-        buildToolsVersion = "36.0.0"
-        minSdkVersion = 24
-        compileSdkVersion = 36
-        targetSdkVersion = 36
-        ndkVersion = "27.1.12297006"
-        kotlinVersion = "2.2.0"
-    }
-    repositories {
-        google()
-        mavenCentral()
-    }
-    dependencies {
-        classpath("com.android.tools.build:gradle:8.8.2")
-        classpath("com.facebook.react:react-native-gradle-plugin")
-        classpath("org.jetbrains.kotlin:kotlin-gradle-plugin:${kotlinVersion}")
-        classpath("com.google.devtools.ksp:com.google.devtools.ksp.gradle.plugin:2.2.0-2.0.2")
-    }
+apply plugin: "com.android.application"
+apply plugin: "org.jetbrains.kotlin.android"
+apply plugin: "com.facebook.react"
+
+import org.apache.commons.io.FileUtils
+
+def enableProguardInReleaseBuilds = false
+def jscFlavor = 'org.webkit:android-jsc:+'
+
+react {
+    codegenDir = new File(["node", "android", "app", "build", "generated", "codegen"].join(File.separator))
+    autolinkLibrariesWithApp()
 }
 
-apply plugin: "com.facebook.react.rootproject"
+android {
+    ndkVersion rootProject.ext.ndkVersion
+    buildToolsVersion rootProject.ext.buildToolsVersion
+    compileSdk rootProject.ext.compileSdkVersion
 
-// Force every Android subproject (incl. third-party native modules like op-sqlite and
-// react-native-audio-api) onto the ONE pinned NDK. Without this, a module that declares
-// no ndkVersion falls back to the AGP-default NDK (27.0.12077973), which the app never
-// pins or installs — CI then fails to configure with "Failed to install ndk;27.0.12077973".
-// Applied via plugins.withId (runs when the Android plugin is applied) rather than
-// afterEvaluate — the latter threw "Cannot run afterEvaluate when the project is already
-// evaluated" for subprojects the React root plugin had already configured.
-subprojects { subproject ->
-    ["com.android.application", "com.android.library"].each { pluginId ->
-        subproject.plugins.withId(pluginId) {
-            subproject.android {
-                ndkVersion rootProject.ext.ndkVersion
+    namespace "ai.offgridmobile"
+    defaultConfig {
+        applicationId "ai.offgridmobile"
+        minSdkVersion rootProject.ext.minSdkVersion
+        targetSdkVersion rootProject.ext.targetSdkVersion
+        versionCode 1
+        versionName "1.0"
+        ndk {
+            abiFilters "arm64-v8a"
+        }
+    }
+
+    signingConfigs {
+        debug {
+            storeFile file('debug.keystore')
+            storePassword 'android'
+            keyAlias 'androiddebugkey'
+            keyPassword 'android'
+        }
+        release {
+            if (project.hasProperty('MYAPP_RELEASE_STORE_FILE')) {
+                storeFile file(MYAPP_RELEASE_STORE_FILE)
+                storePassword MYAPP_RELEASE_STORE_PASSWORD
+                keyAlias MYAPP_RELEASE_KEY_ALIAS
+                keyPassword MYAPP_RELEASE_KEY_PASSWORD
+            }
+        }
+    }
+
+    buildTypes {
+        debug {
+            signingConfig signingConfigs.debug
+        }
+        release {
+            signingConfig signingConfigs.getByName("debug")
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile("proguard-android.txt"), "proguard-rules.pro"
+            packagingOptions {
+                jniLibs {
+                    useLegacyPackaging = true
+                }
             }
         }
     }
 }
 
+dependencies {
+    implementation fileTree(dir: "libs", include: ["*.jar"])
+    implementation "com.facebook.react:react-native:+"
+    implementation "androidx.swiperefreshlayout:swiperefreshlayout:1.0.0"
+    if (hermesEnabled.toBoolean()) {
+        implementation("com.facebook.react:hermes-engine:+") {
+            exclude group: "com.facebook.fbjni"
+        }
+    } else {
+        implementation jscFlavor
+    }
+}
+
+apply from: file("../../node_modules/@react-native-community/cli-platform-android/native_modules.gradle"); applyNativeModulesAppBuildGradle(project)
