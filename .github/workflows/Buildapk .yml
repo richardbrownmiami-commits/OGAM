@@ -1,66 +1,109 @@
-name: Main Build
+name: Dev APK - Personal
+
 on:
-  workflow_dispatch:
+  push:
+    branches: [dev]
+
 jobs:
-  build:
+  pre-check:
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
+    outputs:
+      status: ${{ steps.check.outputs.status }}
     steps:
       - uses: actions/checkout@v4
 
-      - name: Add rag sync speech
+      - uses: actions/setup-node@v4
+        with: { node-version: 20, cache: 'npm' }
+
+      - name: Check & Summary
+        id: check
         run: |
-          mkdir -p shared/packages/sync/src
-          mkdir -p shared/packages/rag/src
-          mkdir -p shared/packages/speech/src
-          printf '{"name":"@offgrid/sync","version":"1.0.0","main":"src/index.ts"}\n' > shared/packages/sync/package.json
-          printf '{"name":"@offgrid/rag","version":"1.0.0","main":"src/index.ts"}\n' > shared/packages/rag/package.json
-          printf '{"name":"@offgrid/speech","version":"1.0.0","main":"src/index.ts"}\n' > shared/packages/speech/package.json
-          cat > shared/packages/sync/src/index.ts << 'EOF'
-          export const startSync = async () => {};
-          export const stopSync = async () => {};
-          export default { startSync, stopSync };
-          EOF
-          cat > shared/packages/rag/src/index.ts << 'EOF'
-          export const queryRag = async () => [];
-          export default { queryRag };
-          EOF
-          cat > shared/packages/speech/src/index.ts << 'EOF'
-          export const startSpeech = async () => {};
-          export const stopSpeech = async () => {};
-          export default { startSpeech, stopSpeech };
-          EOF
-          sed -i 's|file:../shared|file:./shared|g' package.json
-          cat package.json | grep offgrid
+          echo "### 🔍 Pre-Check Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          # 1. package.json
+          if cat package.json | python3 -m json.tool > /dev/null; then
+            echo "- ✅ package.json valid" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "- ❌ package.json INVALID JSON" >> $GITHUB_STEP_SUMMARY
+            echo "status=FAIL: package.json broken" >> $GITHUB_OUTPUT
+            exit 1
+          fi
+
+          # 2. install (auto-creates shared folders via preinstall)
+          if npm install --no-audit --no-fund 2>&1 | tail -n 20 > /tmp/install.log; then
+            echo "- ✅ npm install ok (shared folders auto-fixed)" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "- ❌ npm install FAILED" >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+            cat /tmp/install.log >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+            echo "status=FAIL: npm install failed - check log above" >> $GITHUB_OUTPUT
+            exit 1
+          fi
+
+          # 3. metro
+          if npx react-native config > /dev/null 2>&1; then
+            echo "- ✅ Metro config ok" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "- ❌ Metro config failed" >> $GITHUB_STEP_SUMMARY
+            echo "status=FAIL: react-native config failed" >> $GITHUB_OUTPUT
+            exit 1
+          fi
+          echo "status=OK" >> $GITHUB_OUTPUT
+
+  build:
+    needs: pre-check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
 
       - uses: actions/setup-node@v4
-        with:
-          node-version: 24
+        with: { node-version: 20, cache: 'npm' }
+
       - uses: actions/setup-java@v4
-        with:
-          distribution: 'temurin'
-          java-version: '21'
-      - uses: android-actions/setup-android@v3
+        with: { distribution: 'temurin', java-version: '17' }
 
-      - name: Install
+      - name: Cache Gradle
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle
+            android/.gradle
+            android/app/build
+          key: gradle-arm64-${{ hashFiles('android/gradle/**', 'android/app/build.gradle') }}
+
+      - name: Build APK (arm64 only = 65MB)
+        id: build_apk
         run: |
-          rm -rf patches
-          yarn install --frozen-lockfile || yarn install
+          npm install --no-audit --no-fund
+          cd android
+         ./gradlew :app:assembleDevDebug -PreactNativeArchitectures=arm64-v8a --no-daemon --stacktrace 2>&1 | tee /tmp/build.log
+          echo "APK built: $(ls -lh app/build/outputs/apk/dev/debug/*.apk | awk '{print $5}')"
 
-      - name: Build
-        run: cd android && ./gradlew assembleRelease -PreactNativeArchitectures=arm64-v8a --no-daemon
+      - name: On Failure - Create 10 line error report
+        if: failure()
+        run: |
+          echo "### ❌ BUILD FAILED" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "#### Last 10 lines (share this with me):" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          tail -n 30 /tmp/build.log | tail -n 10 >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Full log in Artifacts -> build-log.txt" >> $GITHUB_STEP_SUMMARY
+          tail -n 100 /tmp/build.log > build-log.txt
 
-      - name: Get version
-        id: ver
-        run: echo "v=$(node -p "require('./package.json').version")-$(date +%Y%m%d-%H%M)" >> $GITHUB_OUTPUT
-
-      - uses: actions/upload-artifact@v4
+      - name: Upload APK
+        if: success()
+        uses: actions/upload-artifact@v4
         with:
-          name: app-${{ steps.ver.outputs.v }}
-          path: android/app/build/outputs/apk/release/*.apk
+          name: app-arm64-65MB
+          path: android/app/build/outputs/apk/dev/debug/*.apk
 
-      - uses: softprops/action-gh-release@v2
+      - name: Upload Error Log
+        if: failure()
+        uses: actions/upload-artifact@v4
         with:
-          tag_name: v${{ steps.ver.outputs.v }}
-          files: android/app/build/outputs/apk/release/*.apk
+          name: error-10-lines
+          path: build-log.txt
