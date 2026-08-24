@@ -1,37 +1,65 @@
 name: Main Build
-on: {workflow_dispatch: {}}
+on:
+  workflow_dispatch:
 jobs:
   build:
     runs-on: ubuntu-latest
-    permissions: {contents: write}
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
 
-      - name: Add rag sync speech properly
+      - name: Add rag sync speech
         run: |
           mkdir -p shared/packages/sync/src
           mkdir -p shared/packages/rag/src
           mkdir -p shared/packages/speech/src
-          echo '{"name":"@offgrid/sync","version":"1.0.0","main":"src/index.ts"}' > shared/packages/sync/package.json
-          echo '{"name":"@offgrid/rag","version":"1.0.0","main":"src/index.ts"}' > shared/packages/rag/package.json
-          echo '{"name":"@offgrid/speech","version":"1.0.0","main":"src/index.ts"}' > shared/packages/speech/package.json
-          echo "export const startSync=async()=>{}; export const stopSync=async()=>{}; export default {startSync, stopSync};" > shared/packages/sync/src/index.ts
-          echo "export const queryRag=async()=>[]; export default {queryRag};" > shared/packages/rag/src/index.ts
-          echo "export const startSpeech=async()=>{}; export const stopSpeech=async()=>{}; export default {startSpeech, stopSpeech};" > shared/packages/speech/src/index.ts
-          # Fix package.json paths to ./shared
+          printf '{"name":"@offgrid/sync","version":"1.0.0","main":"src/index.ts"}\n' > shared/packages/sync/package.json
+          printf '{"name":"@offgrid/rag","version":"1.0.0","main":"src/index.ts"}\n' > shared/packages/rag/package.json
+          printf '{"name":"@offgrid/speech","version":"1.0.0","main":"src/index.ts"}\n' > shared/packages/speech/package.json
+          cat > shared/packages/sync/src/index.ts << 'EOF'
+          export const startSync = async () => {};
+          export const stopSync = async () => {};
+          export default { startSync, stopSync };
+          EOF
+          cat > shared/packages/rag/src/index.ts << 'EOF'
+          export const queryRag = async () => [];
+          export default { queryRag };
+          EOF
+          cat > shared/packages/speech/src/index.ts << 'EOF'
+          export const startSpeech = async () => {};
+          export const stopSpeech = async () => {};
+          export default { startSpeech, stopSpeech };
+          EOF
           sed -i 's|file:../shared|file:./shared|g' package.json
           cat package.json | grep offgrid
 
       - uses: actions/setup-node@v4
-        with: {node-version: 24, cache: 'yarn'}
+        with:
+          node-version: 24
+          cache: 'yarn'
       - uses: actions/setup-java@v4
-        with: {distribution: 'temurin', java-version: '21'}
+        with:
+          distribution: 'temurin'
+          java-version: '21'
       - uses: android-actions/setup-android@v3
-      - run: yarn install --frozen-lockfile
-      - run: cd android && ./gradlew assembleRelease -PreactNativeArchitectures=arm64-v8a --no-daemon
-      - id: ver
+
+      - name: Install
+        run: yarn install --frozen-lockfile
+
+      - name: Build
+        run: cd android && ./gradlew assembleRelease -PreactNativeArchitectures=arm64-v8a --no-daemon
+
+      - name: Get version
+        id: ver
         run: echo "v=$(node -p "require('./package.json').version")-$(date +%Y%m%d-%H%M)" >> $GITHUB_OUTPUT
+
       - uses: actions/upload-artifact@v4
-        with: {name: app-${{ steps.ver.outputs.v }}, path: android/app/build/outputs/apk/release/*.apk}
+        with:
+          name: app-${{ steps.ver.outputs.v }}
+          path: android/app/build/outputs/apk/release/*.apk
+
       - uses: softprops/action-gh-release@v2
-        with: {tag_name: v${{ steps.ver.outputs.v }}, files: android/app/build/outputs/apk/release/*.apk}
+        with:
+          tag_name: v${{ steps.ver.outputs.v }}
+          files: android/app/build/outputs/apk/release/*.apk
