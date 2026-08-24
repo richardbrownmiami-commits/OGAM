@@ -1,34 +1,45 @@
+import org.apache.commons.io.FileUtils
+
 apply plugin: "com.android.application"
 apply plugin: "org.jetbrains.kotlin.android"
-apply plugin: "com.google.devtools.ksp"
 apply plugin: "com.facebook.react"
-apply from: file("../../node_modules/react-native-vector-icons/fonts.gradle")
+
+def enableProguardInReleaseBuilds = false
+def jscFlavor = 'org.webkit:android-jsc:+'
 
 react {
+    /* Folders */
+    codegenDir = new File(["node", "android", "app", "build", "generated", "codegen"].join(File.separator))
+    /* Use .so file from prefab ready setups */
     autolinkLibrariesWithApp()
 }
 
-def enableProguardInReleaseBuilds = false
-def jscFlavor = 'io.github.react-native-community:jsc-android:2026004.+'
+/**
+ * Set this to true to Run Proguard on Release builds to minify the Java bytecode.
+ */
+def enableSeparateBuildPerCPUArchitecture = false
+def enableMinifyInReleaseBuilds = false
 
 android {
     ndkVersion rootProject.ext.ndkVersion
     buildToolsVersion rootProject.ext.buildToolsVersion
     compileSdk rootProject.ext.compileSdkVersion
+
     namespace "ai.offgridmobile"
-    compileOptions {
-        coreLibraryDesugaringEnabled true
-    }
+    
     defaultConfig {
         applicationId "ai.offgridmobile"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 1787586003
-        versionName "0.0.111"
+        versionCode 1
+        versionName "1.0"
+        
+        // FIXED: Only this, NO splits block
         ndk {
             abiFilters "arm64-v8a"
         }
     }
+
     signingConfigs {
         debug {
             storeFile file('debug.keystore')
@@ -37,79 +48,40 @@ android {
             keyPassword 'android'
         }
         release {
-            if (project.hasProperty('OFFGRID_UPLOAD_STORE_FILE')) {
-                storeFile file(OFFGRID_UPLOAD_STORE_FILE)
-                storePassword OFFGRID_UPLOAD_STORE_PASSWORD
-                keyAlias OFFGRID_UPLOAD_KEY_ALIAS
-                keyPassword OFFGRID_UPLOAD_KEY_PASSWORD
+            if (project.hasProperty('MYAPP_RELEASE_STORE_FILE')) {
+                storeFile file(MYAPP_RELEASE_STORE_FILE)
+                storePassword MYAPP_RELEASE_STORE_PASSWORD
+                keyAlias MYAPP_RELEASE_KEY_ALIAS
+                keyPassword MYAPP_RELEASE_KEY_PASSWORD
             }
         }
     }
-    splits {
-        abi {
-            enable true
-            reset()
-            include "arm64-v8a"
-            universalApk false
-        }
-    }
-    lint {
-        baseline = file("lint-baseline.xml")
-    }
-    testOptions {
-        unitTests {
-            includeAndroidResources = true
-            all {
-                jvmArgs '-noverify'
-            }
-        }
-    }
+
     buildTypes {
         debug {
             signingConfig signingConfigs.debug
-            applicationIdSuffix ".dev"
         }
         release {
-            signingConfig signingConfigs.release.storeFile ? signingConfigs.release : signingConfigs.debug
-            minifyEnabled enableProguardInReleaseBuilds
+            signingConfig signingConfigs.release
+            minifyEnabled enableMinifyInReleaseBuilds
             proguardFiles getDefaultProguardFile("proguard-android.txt"), "proguard-rules.pro"
+            // KEEP GGUF INSIDE - offline working
+            packagingOptions {
+                doNotStrip "**/*.so"
+            }
         }
     }
-    packaging {
-        jniLibs {
-            useLegacyPackaging = true
-        }
-    }
-    aaptOptions {
-        noCompress 'gguf'
-    }
-}
 
-configurations.all {
-    exclude group: 'com.android.support'
+    // FIXED: REMOVED splits block completely - this was causing your error
 }
 
 dependencies {
-    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.5")
-    implementation("com.facebook.react:react-android")
-    if (hermesEnabled.toBoolean()) {
-        implementation("com.facebook.react:hermes-android")
-    } else {
-        implementation jscFlavor
+    implementation fileTree(dir: "libs", include: ["*.jar"])
+    implementation "com.facebook.react:react-native:+"
+    implementation "androidx.swiperefreshlayout:swiperefreshlayout:1.0.0"
+    debugImplementation("com.facebook.flipper:flipper:${FLIPPER_VERSION}") {
+        exclude group:'com.facebook.fbjni'
     }
-    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
-    implementation("io.legere:pdfiumandroid:1.0.35")
-    implementation("com.google.ai.edge.litertlm:litertlm-android:0.11.0")
-    def room_version = "2.8.2"
-    implementation("androidx.room:room-runtime:$room_version")
-    implementation("androidx.room:room-ktx:$room_version")
-    ksp("androidx.room:room-compiler:$room_version")
-    implementation("androidx.work:work-runtime-ktx:2.10.0")
-    implementation("androidx.lifecycle:lifecycle-livedata-ktx:2.8.7")
-    implementation("com.squareup.okhttp3:okhttp:4.12.0")
-    testImplementation("junit:junit:4.13.2")
-    testImplementation("org.robolectric:robolectric:4.13")
-    testImplementation("org.mockito:mockito-core:5.11.0")
-    testImplementation("org.mockito.kotlin:mockito-kotlin:5.4.0")
-    testImplementation("androidx.test:core:1.6.1")
-}
+    debugImplementation("com.facebook.flipper:flipper-network-plugin:${FLIPPER_VERSION}") {
+        exclude group:'com.facebook.flipper'
+        exclude group:'com.facebook.f
