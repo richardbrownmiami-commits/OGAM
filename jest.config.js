@@ -10,6 +10,12 @@ const fs = require('node:fs');
 // @offgrid/pro to the null stub, so the open-core suite still runs and stays green.
 const proExists = fs.existsSync(path.resolve(__dirname, 'pro/package.json'));
 
+// Check if shared packages exist (they won't be checked out in public CI without PAT)
+const syncPackagePath = path.resolve(__dirname, '../shared/packages/sync');
+const ragPackagePath = path.resolve(__dirname, '../shared/packages/rag');
+const speechPackagePath = path.resolve(__dirname, '../shared/packages/speech');
+const sharedPackagesExist = fs.existsSync(syncPackagePath) && fs.existsSync(ragPackagePath) && fs.existsSync(speechPackagePath);
+
 // Suites under THIS repo's __tests__ that import @offgrid/pro. Ignored ONLY when pro is
 // absent. (pro/'s OWN suite is always ignored here — it runs in the pro repo's CI.)
 const proDependentTestPaths = [
@@ -31,6 +37,12 @@ const proDependentTestPaths = [
   '__tests__/unit/tools/mcpPresets.test.ts',
 ];
 
+// Suites that depend on @offgrid/speech, @offgrid/sync, or @offgrid/rag
+const sharedPackageDependentTestPaths = [
+  '__tests__/unit/services/deviceFingerprint.test.ts',
+  '__tests__/unit/services/imageGenPhase.test.ts',
+];
+
 module.exports = {
   preset: 'react-native',
   setupFilesAfterEnv: ['<rootDir>/jest.setup.ts'],
@@ -44,6 +56,8 @@ module.exports = {
     // when it's checked out, and are ignored only when pro is genuinely absent.
     '<rootDir>/pro/',
     ...(proExists ? [] : proDependentTestPaths),
+    // Ignore shared package dependent tests when shared packages aren't checked out
+    ...(sharedPackagesExist ? [] : sharedPackageDependentTestPaths),
   ],
   // Stale agent git-worktrees under .claude/worktrees/ each carry a full repo copy (incl. their own
   // pro/package.json named @offgrid/pro), which collide in Haste's module map and make require('@offgrid/pro')
@@ -64,10 +78,16 @@ module.exports = {
     // @offgrid/sync: test against SOURCE (jest transforms the TS) rather than the tsup dist,
     // which references @babel/runtime helpers not resolvable from the out-of-root package. Keep
     // these subpaths in step with metro.config.js's aliases and the package's exports map.
-    '^@offgrid/sync$': '<rootDir>/../shared/packages/sync/src/index.ts',
-    '^@offgrid/sync/rn$': '<rootDir>/../shared/packages/sync/src/adapters/rn-tcp.ts',
-    '^@offgrid/sync/rn-discovery$': '<rootDir>/../shared/packages/sync/src/adapters/rn-discovery.ts',
-    '^@offgrid/sync/portable$': '<rootDir>/../shared/packages/sync/src/portable/index.ts',
+    ...(sharedPackagesExist ? {
+      '^@offgrid/sync$': '<rootDir>/../shared/packages/sync/src/index.ts',
+      '^@offgrid/sync/rn$': '<rootDir>/../shared/packages/sync/src/adapters/rn-tcp.ts',
+      '^@offgrid/sync/rn-discovery$': '<rootDir>/../shared/packages/sync/src/adapters/rn-discovery.ts',
+      '^@offgrid/sync/portable$': '<rootDir>/../shared/packages/sync/src/portable/index.ts',
+      '^@offgrid/rag/(.*)$': '<rootDir>/../shared/packages/rag/src/$1',
+      '^@offgrid/rag$': '<rootDir>/../shared/packages/rag/src/index.ts',
+      '^@offgrid/speech/(.*)$': '<rootDir>/../shared/packages/speech/src/$1',
+      '^@offgrid/speech$': '<rootDir>/../shared/packages/speech/src/index.ts',
+    } : {}),
     // The sync source lives out-of-root; when jest transforms it, babel injects @babel/runtime
     // helper imports that would otherwise resolve from ../shared (where they aren't installed).
     // Pin them to mobile's own copy.
