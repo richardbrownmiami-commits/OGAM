@@ -93,8 +93,8 @@ android {
         applicationId "ai.offgridmobile"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 1787566542
-        versionName "0.0.109"
+        versionCode 1787579593
+        versionName "0.0.110"
     }
     signingConfigs {
         debug {
