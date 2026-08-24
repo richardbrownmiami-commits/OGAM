@@ -96,7 +96,6 @@ jobs:
       # Matching branch first, main as the fallback: a PR that changes the app and the shared package
       # together has to be tested against the package it expects, not against main's copy.
       - name: Check out the shared monorepo
-        if: ${{ env.PRO_SUBMODULE_PAT != '' }}
         id: shared_branch
         continue-on-error: true
         uses: actions/checkout@v4
@@ -107,7 +106,7 @@ jobs:
           ref: ${{ github.head_ref || github.ref_name }}
           persist-credentials: false
       - name: Fall back to shared main
-        if: ${{ env.PRO_SUBMODULE_PAT != '' && steps.shared_branch.outcome != 'success' }}
+        if: ${{ steps.shared_branch.outcome != 'success' }}
         uses: actions/checkout@v4
         with:
           repository: off-grid-ai/shared
@@ -115,7 +114,6 @@ jobs:
           path: _shared
           persist-credentials: false
       - name: Put shared beside this checkout
-        if: ${{ env.PRO_SUBMODULE_PAT != '' }}
         run: |
           rm -rf ../shared
           mv _shared ../shared
@@ -207,6 +205,24 @@ jobs:
             -destination 'platform=iOS Simulator,name=iPhone 16' \
             -only-testing:OffgridMobileTests \
             2>&1 | (xcpretty 2>/dev/null || cat)
+
+      - name: Build Android APK (Debug)
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: cd android && ./gradlew :app:assembleDebug
+
+      - name: Build Android APK (Release)
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: cd android && ./gradlew :app:assembleRelease
+
+      - name: Upload APK artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-apk
+          path: |
+            android/app/build/outputs/apk/debug/
+            android/app/build/outputs/apk/release/
+          if-no-files-found: ignore
 
       - name: Upload coverage to Codecov
         if: always()
