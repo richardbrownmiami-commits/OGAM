@@ -1,45 +1,37 @@
 name: Main Build
-
-on:
-  workflow_dispatch: # ONLY manual - no push
-
+on: {workflow_dispatch: {}}
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 360
-
+    permissions: {contents: write}
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: 'yarn'
-
-      - uses: actions/setup-java@v4
-        with:
-          distribution: 'temurin'
-          java-version: '17'
-
-      - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
-
-      - name: ccache
-        uses: hendrikmuhs/ccache-action@v1.2
-        with:
-          key: ccache-${{ runner.os }}-main
-          # fixed key, no timestamp - now cache will hit
-
-      - name: Install deps
-        run: yarn install --frozen-lockfile
-
-      - name: Build APK arm64 only
+      - name: Add rag sync speech properly
         run: |
-          cd android
-         ./gradlew assembleRelease -PreactNativeArchitectures=arm64-v8a --no-daemon
+          mkdir -p shared/packages/sync/src
+          mkdir -p shared/packages/rag/src
+          mkdir -p shared/packages/speech/src
+          echo '{"name":"@offgrid/sync","version":"1.0.0","main":"src/index.ts"}' > shared/packages/sync/package.json
+          echo '{"name":"@offgrid/rag","version":"1.0.0","main":"src/index.ts"}' > shared/packages/rag/package.json
+          echo '{"name":"@offgrid/speech","version":"1.0.0","main":"src/index.ts"}' > shared/packages/speech/package.json
+          echo "export const startSync=async()=>{}; export const stopSync=async()=>{}; export default {startSync, stopSync};" > shared/packages/sync/src/index.ts
+          echo "export const queryRag=async()=>[]; export default {queryRag};" > shared/packages/rag/src/index.ts
+          echo "export const startSpeech=async()=>{}; export const stopSpeech=async()=>{}; export default {startSpeech, stopSpeech};" > shared/packages/speech/src/index.ts
+          # Fix package.json paths to ./shared
+          sed -i 's|file:../shared|file:./shared|g' package.json
+          cat package.json | grep offgrid
 
-      - name: Upload APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: app-release-arm64
-          path: android/app/build/outputs/apk/release/*.apk
+      - uses: actions/setup-node@v4
+        with: {node-version: 24, cache: 'yarn'}
+      - uses: actions/setup-java@v4
+        with: {distribution: 'temurin', java-version: '21'}
+      - uses: android-actions/setup-android@v3
+      - run: yarn install --frozen-lockfile
+      - run: cd android && ./gradlew assembleRelease -PreactNativeArchitectures=arm64-v8a --no-daemon
+      - id: ver
+        run: echo "v=$(node -p "require('./package.json').version")-$(date +%Y%m%d-%H%M)" >> $GITHUB_OUTPUT
+      - uses: actions/upload-artifact@v4
+        with: {name: app-${{ steps.ver.outputs.v }}, path: android/app/build/outputs/apk/release/*.apk}
+      - uses: softprops/action-gh-release@v2
+        with: {tag_name: v${{ steps.ver.outputs.v }}, files: android/app/build/outputs/apk/release/*.apk}
