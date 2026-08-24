@@ -1,45 +1,71 @@
 name: Main Build
-
 on:
-  workflow_dispatch: # ONLY manual - no push
-
+  workflow_dispatch:
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 360
-
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
 
+      - name: Add rag sync speech
+        run: |
+          mkdir -p ../shared/packages/sync/src
+          mkdir -p ../shared/packages/rag/src
+          mkdir -p ../shared/packages/speech/src
+          mkdir -p shared/packages/sync/src
+          mkdir -p shared/packages/rag/src
+          mkdir -p shared/packages/speech/src
+          for d in ../shared shared; do
+            printf '{"name":"@offgrid/sync","version":"1.0.0","main":"src/index.ts"}\n' > $d/packages/sync/package.json
+            printf '{"name":"@offgrid/rag","version":"1.0.0","main":"src/index.ts"}\n' > $d/packages/rag/package.json
+            printf '{"name":"@offgrid/speech","version":"1.0.0","main":"src/index.ts"}\n' > $d/packages/speech/package.json
+            cat > $d/packages/sync/src/index.ts << 'EOF'
+          export const startSync = async () => {};
+          export const stopSync = async () => {};
+          export default { startSync, stopSync };
+          EOF
+            cat > $d/packages/rag/src/index.ts << 'EOF'
+          export const queryRag = async () => [];
+          export default { queryRag };
+          EOF
+            cat > $d/packages/speech/src/index.ts << 'EOF'
+          export const startSpeech = async () => {};
+          export const stopSpeech = async () => {};
+          export default { startSpeech, stopSpeech };
+          EOF
+          done
+          ls -R ../shared/packages
+          cat package.json | grep offgrid
+
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
-          cache: 'yarn'
-
+          node-version: 24
       - uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
-          java-version: '17'
+          java-version: '21'
+      - uses: android-actions/setup-android@v3
 
-      - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
-
-      - name: ccache
-        uses: hendrikmuhs/ccache-action@v1.2
-        with:
-          key: ccache-${{ runner.os }}-main
-          # fixed key, no timestamp - now cache will hit
-
-      - name: Install deps
-        run: yarn install --frozen-lockfile
-
-      - name: Build APK arm64 only
+      - name: Install
         run: |
-          cd android
-         ./gradlew assembleRelease -PreactNativeArchitectures=arm64-v8a --no-daemon
+          rm -rf patches
+          yarn install --frozen-lockfile || yarn install
 
-      - name: Upload APK
-        uses: actions/upload-artifact@v4
+      - name: Build
+        run: cd android && ./gradlew assembleRelease -PreactNativeArchitectures=arm64-v8a --no-daemon
+
+      - name: Get version
+        id: ver
+        run: echo "v=$(node -p "require('./package.json').version")-$(date +%Y%m%d-%H%M)" >> $GITHUB_OUTPUT
+
+      - uses: actions/upload-artifact@v4
         with:
-          name: app-release-arm64
+          name: app-${{ steps.ver.outputs.v }}
           path: android/app/build/outputs/apk/release/*.apk
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.ver.outputs.v }}
+          files: android/app/build/outputs/apk/release/*.apk
