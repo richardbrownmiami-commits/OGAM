@@ -12,20 +12,8 @@ jobs:
         with:
           node-version: 20
           cache: npm
-      - name: Fast Check - fails in 30 sec if error
-        run: |
-          echo "::group::1. package.json"
-          node -e "JSON.parse(require('fs').readFileSync('package.json','utf8'))"
-          echo "✅ package.json OK"
-          echo "::endgroup::"
-          echo "::group::2. npm install"
-          npm install --no-audit --no-fund
-          echo "✅ install OK"
-          echo "::endgroup::"
-          echo "::group::3. Metro config"
-          npx react-native config
-          echo "✅ metro OK"
-          echo "::endgroup::"
+      - name: Fast Check
+        run: npm install --no-audit --no-fund && npx react-native config
 
   build:
     needs: check
@@ -40,22 +28,11 @@ jobs:
         with:
           distribution: temurin
           java-version: 17
-
-      - name: Install JS
+      - name: Install
         run: npm install --no-audit --no-fund
-
-      - name: Build APK 65MB
+      - name: Build 65MB
         working-directory: android
-        run: |
-         ./gradlew :app:assembleDevDebug -PreactNativeArchitectures=arm64-v8a --no-daemon --stacktrace 2>&1 | tee /tmp/build.log
-          ls -lh app/build/outputs/apk/dev/debug/*.apk
-
-      - name: Show last 15 lines on FAIL
-        if: failure()
-        run: |
-          echo "### ❌ BUILD FAILED - Last 15 lines"
-          tail -n 15 /tmp/build.log || echo "No log - failed before gradle"
-
+        run:./gradlew :app:assembleDevDebug -PreactNativeArchitectures=arm64-v8a --no-daemon
       - name: Upload APK
         if: success()
         uses: actions/upload-artifact@v4
