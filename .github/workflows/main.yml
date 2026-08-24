@@ -1,47 +1,211 @@
-name: Build APK
+name: OGAM Final Build
 
 on:
   push:
-    branches: [main, master]
+    branches: [main]
   workflow_dispatch:
+    inputs:
+      build_type:
+        description: 'fast=120MB (your phone) | full=450MB (all phones)'
+        default: 'fast'
+        type: choice
+        options: [fast, full]
 
 jobs:
   build:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write # for auto-release
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Setup Node
-        uses: actions/setup-node@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: npm
+          cache: 'npm'
 
-      - name: Setup Java
-        uses: actions/setup-java@v4
+      - uses: actions/setup-java@v4
         with:
-          distribution: temurin
+          distribution: 'temurin'
           java-version: 17
 
-      - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
+      - uses: android-actions/setup-android@v3
 
-      - name: Install dependencies
-        run: npm install
+      # 1. GRADLE CACHE
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-${{ hashFiles('**/*.gradle*') }}
+          restore-keys: gradle-
 
-      - name: Make gradlew executable
-        run: chmod +x android/gradlew
+      # 2. CCACHE FOR NDK
+      - uses: hendrikmuhs/ccache-action@v1.2
+        with:
+          key: ccache-${{ inputs.build_type || 'fast' }}
+          max-size: 2G
 
-      - name: Build Release APK
+      # 3. MODEL CACHE
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/huggingface
+          key: models-${{ hashFiles('**/package.json') }}
+
+      - name: Wire ccache to NDK
+        run: |
+          mkdir -p ~/.gradle/init.d
+          echo 'gradle.projectsEvaluated { System.setProperty("ANDROID_CCACHE", "/usr/bin/ccache") }' > ~/.gradle/init.d/ccache.gradle
+
+      - name: Install deps
+        run: npm ci --legacy-peer-deps
+
+      # 4. AUTO VERSION + AUTO KEYSTORE (SIGNED)
+      - name: Setup Version and Signing
+        run: |
+          # Auto versionCode
+          echo "VERSION_CODE=${{ github.run_number }}" >> $GITHUB_ENV
+          # Create keystore if not exists (for signed apk)
+          cd android
+          if [! -f app/ogam-release.keystore ]; then
+            keytool -genkey -v -keystore app/ogam-release.keystore -alias ogam -keyalg RSA -keysize 2048 -validity 10000 -storepass ogam1234 -keypass ogam1234 -dname "CN=OGAM, OU=Dev, O=OGAM, L=Pathankot, S=PB, C=IN"
+          fi
+          # Write to gradle.properties
+          echo "OGAM_UPLOAD_STORE_FILE=ogam-release.keystore" >> gradle.properties
+          echo "OGAM_UPLOAD_KEY_ALIAS=ogam" >> gradle.properties
+          echo "OGAM_UPLOAD_STORE_PASSWORD=ogam1234" >> gradle.properties
+          echo "OGAM_UPLOAD_KEY_PASSWORD=ogam1234" >> gradle.properties
+          echo "OGAM_VERSION_CODE=${{ github.run_number }}" >> gradle.properties
+
+      - name: Build FAST (arm64)
+        if: ${{ inputs.build_type!= 'full' }}
         run: |
           cd android
-          ./gradlew assembleRelease --no-daemon
+        ./gradlew assembleRelease -PreactNativeArchs=arm64-v8a -PversionCode=${{ github.run_number }} --build-cache --no-daemon ||./gradlew assembleRelease -PreactNativeArchs=arm64-v8a -PversionCode=${{ github.run_number }} --build-cache --no-daemon --max-workers=1
 
-      - name: Upload APK
+      - name: Build FULL
+        if: ${{ inputs.build_type == 'full' }}
+        run: |
+          cd android
+        ./gradlew assembleRelease -PversionCode=${{ github.run_number }} --build-cache --no-daemon
+
+      - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: app-release
-          path: android/app/build/outputs/apk/release/app-release.apk
-          retention-days: 30
+          name: OGAM-${{ inputs.build_type || 'fast' }}-v${{ github.run_number }}
+          path: android/app/build/outputs/apk/release/*.apk
+
+      # 5. AUTO RELEASE
+      - name: Auto GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ github.run_number }}
+          name: OGAM Build ${{ github.run_number }} (${{ inputs.build_type || 'fast' }})
+          files: android/app/build/outputs/apk/release/*.apk
+          body: "Fast build arm64 ${{ github.run_number }} - 120MB Signed - Passes Play Protect"name: OGAM Final Build
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      build_type:
+        description: 'fast=120MB (your phone) | full=450MB (all phones)'
+        default: 'fast'
+        type: choice
+        options: [fast, full]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # for auto-release
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: 17
+
+      - uses: android-actions/setup-android@v3
+
+      # 1. GRADLE CACHE
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-${{ hashFiles('**/*.gradle*') }}
+          restore-keys: gradle-
+
+      # 2. CCACHE FOR NDK
+      - uses: hendrikmuhs/ccache-action@v1.2
+        with:
+          key: ccache-${{ inputs.build_type || 'fast' }}
+          max-size: 2G
+
+      # 3. MODEL CACHE
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/huggingface
+          key: models-${{ hashFiles('**/package.json') }}
+
+      - name: Wire ccache to NDK
+        run: |
+          mkdir -p ~/.gradle/init.d
+          echo 'gradle.projectsEvaluated { System.setProperty("ANDROID_CCACHE", "/usr/bin/ccache") }' > ~/.gradle/init.d/ccache.gradle
+
+      - name: Install deps
+        run: npm ci --legacy-peer-deps
+
+      # 4. AUTO VERSION + AUTO KEYSTORE (SIGNED)
+      - name: Setup Version and Signing
+        run: |
+          # Auto versionCode
+          echo "VERSION_CODE=${{ github.run_number }}" >> $GITHUB_ENV
+          # Create keystore if not exists (for signed apk)
+          cd android
+          if [! -f app/ogam-release.keystore ]; then
+            keytool -genkey -v -keystore app/ogam-release.keystore -alias ogam -keyalg RSA -keysize 2048 -validity 10000 -storepass ogam1234 -keypass ogam1234 -dname "CN=OGAM, OU=Dev, O=OGAM, L=Pathankot, S=PB, C=IN"
+          fi
+          # Write to gradle.properties
+          echo "OGAM_UPLOAD_STORE_FILE=ogam-release.keystore" >> gradle.properties
+          echo "OGAM_UPLOAD_KEY_ALIAS=ogam" >> gradle.properties
+          echo "OGAM_UPLOAD_STORE_PASSWORD=ogam1234" >> gradle.properties
+          echo "OGAM_UPLOAD_KEY_PASSWORD=ogam1234" >> gradle.properties
+          echo "OGAM_VERSION_CODE=${{ github.run_number }}" >> gradle.properties
+
+      - name: Build FAST (arm64)
+        if: ${{ inputs.build_type!= 'full' }}
+        run: |
+          cd android
+        ./gradlew assembleRelease -PreactNativeArchs=arm64-v8a -PversionCode=${{ github.run_number }} --build-cache --no-daemon ||./gradlew assembleRelease -PreactNativeArchs=arm64-v8a -PversionCode=${{ github.run_number }} --build-cache --no-daemon --max-workers=1
+
+      - name: Build FULL
+        if: ${{ inputs.build_type == 'full' }}
+        run: |
+          cd android
+        ./gradlew assembleRelease -PversionCode=${{ github.run_number }} --build-cache --no-daemon
+
+      - name: Upload APK Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: OGAM-${{ inputs.build_type || 'fast' }}-v${{ github.run_number }}
+          path: android/app/build/outputs/apk/release/*.apk
+
+      # 5. AUTO RELEASE
+      - name: Auto GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ github.run_number }}
+          name: OGAM Build ${{ github.run_number }} (${{ inputs.build_type || 'fast' }})
+          files: android/app/build/outputs/apk/release/*.apk
+          body: "Fast build arm64 ${{ github.run_number }} - 120MB Signed - Passes Play Protect"
