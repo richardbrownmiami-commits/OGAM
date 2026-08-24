@@ -4,97 +4,30 @@ apply plugin: "com.google.devtools.ksp"
 apply plugin: "com.facebook.react"
 apply from: file("../../node_modules/react-native-vector-icons/fonts.gradle")
 
-/**
- * This is the configuration block to customize your React Native Android app.
- * By default you don't need to apply any configuration, just uncomment the lines you need.
- */
 react {
-    /* Folders */
-    //   The root of your project, i.e. where "package.json" lives. Default is '../..'
-    // root = file("../../")
-    //   The folder where the react-native NPM package is. Default is ../../node_modules/react-native
-    // reactNativeDir = file("../../node_modules/react-native")
-    //   The folder where the react-native Codegen package is. Default is ../../node_modules/@react-native/codegen
-    // codegenDir = file("../../node_modules/@react-native/codegen")
-    //   The cli.js file which is the React Native CLI entrypoint. Default is ../../node_modules/react-native/cli.js
-    // cliFile = file("../../node_modules/react-native/cli.js")
-
-    /* Variants */
-    //   The list of variants to that are debuggable. For those we're going to
-    //   skip the bundling of the JS bundle and the assets. By default is just 'debug'.
-    //   If you add flavors like lite, prod, etc. you'll have to list your debuggableVariants.
-    // debuggableVariants = ["liteDebug", "prodDebug"]
-
-    /* Bundling */
-    //   A list containing the node command and its flags. Default is just 'node'.
-    // nodeExecutableAndArgs = ["node"]
-    //
-    //   The command to run when bundling. By default is 'bundle'
-    // bundleCommand = "ram-bundle"
-    //
-    //   The path to the CLI configuration file. Default is empty.
-    // bundleConfig = file(../rn-cli.config.js)
-    //
-    //   The name of the generated asset file containing your JS bundle
-    // bundleAssetName = "MyApplication.android.bundle"
-    //
-    //   The entry file for bundle generation. Default is 'index.android.js' or 'index.js'
-    // entryFile = file("../js/MyApplication.android.js")
-    //
-    //   A list of extra flags to pass to the 'bundle' commands.
-    //   See https://github.com/react-native-community/cli/blob/main/docs/commands.md#bundle
-    // extraPackagerArgs = []
-
-    /* Hermes Commands */
-    //   The hermes compiler command to run. By default it is 'hermesc'
-    // hermesCommand = "$rootDir/my-custom-hermesc/bin/hermesc"
-    //
-    //   The list of flags to pass to the Hermes compiler. By default is "-O", "-output-source-map"
-    // hermesFlags = ["-O", "-output-source-map"]
-
-    /* Autolinking */
     autolinkLibrariesWithApp()
 }
 
-/**
- * Set this to true to Run Proguard on Release builds to minify the Java bytecode.
- */
 def enableProguardInReleaseBuilds = false
-
-/**
- * The preferred build flavor of JavaScriptCore (JSC)
- *
- * For example, to use the international variant, you can use:
- * `def jscFlavor = io.github.react-native-community:jsc-android-intl:2026004.+`
- *
- * The international variant includes ICU i18n library and necessary data
- * allowing to use e.g. `Date.toLocaleString` and `String.localeCompare` that
- * give correct results when using with locales other than en-US. Note that
- * this variant is about 6MiB larger per architecture than default.
- */
 def jscFlavor = 'io.github.react-native-community:jsc-android:2026004.+'
 
 android {
     ndkVersion rootProject.ext.ndkVersion
     buildToolsVersion rootProject.ext.buildToolsVersion
     compileSdk rootProject.ext.compileSdkVersion
-
     namespace "ai.offgridmobile"
-    // java.time on API 24. minSdk is 24, but Instant/Duration and friends only exist from API 26, so the
-    // Kotlin sync modules (screenshot watcher, directory source, downloads) would throw NoSuchMethodError on
-    // Android 7 - a crash, not a lint nag. Desugaring backports them instead of us hand-rolling date
-    // formatting in three places and risking a different ISO-8601 shape on the wire, which sync compares
-    // across devices.
     compileOptions {
         coreLibraryDesugaringEnabled true
     }
-
     defaultConfig {
         applicationId "ai.offgridmobile"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode 1787586003
         versionName "0.0.111"
+        ndk {
+            abiFilters "arm64-v8a"
+        }
     }
     signingConfigs {
         debug {
@@ -112,17 +45,20 @@ android {
             }
         }
     }
+    splits {
+        abi {
+            enable true
+            reset()
+            include "arm64-v8a"
+            universalApk false
+        }
+    }
     lint {
         baseline = file("lint-baseline.xml")
     }
     testOptions {
         unitTests {
             includeAndroidResources = true
-            // Amazon IAP's com.amazon.device.iap.ResponseReceiver (pulled in transitively
-            // via RevenueCat) ships pre-Java-7 bytecode without stackmap frames. Robolectric
-            // instantiates every receiver in the merged manifest during app setup, and that
-            // class fails strict bytecode verification on JDK 17+ (VerifyError: "Expecting a
-            // stackmap frame at branch target"). Relax verification for the unit-test JVM only.
             all {
                 jvmArgs '-noverify'
             }
@@ -141,15 +77,10 @@ android {
     }
     packaging {
         jniLibs {
-            // Force compressed .so storage so Play Store extracts libs to nativeLibraryDir
-            // as real filesystem files. Without this, AGP's default "uncompressed native libs"
-            // stores .so files inside the APK zip — File.exists() returns false for them and
-            // exec() fails with EACCES (error=13) because you can't fork-exec from a zip entry.
             useLegacyPackaging = true
         }
     }
     aaptOptions {
-        // Prevent AAPT from compressing .gguf model files — they must be copied byte-for-byte
         noCompress 'gguf'
     }
 }
@@ -159,28 +90,16 @@ configurations.all {
 }
 
 dependencies {
-    // Backports java.time (and more) to API 24 - see the compileOptions note above.
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.5")
-
-    // The version of react-native is set by the React Native Gradle Plugin
     implementation("com.facebook.react:react-android")
-
     if (hermesEnabled.toBoolean()) {
         implementation("com.facebook.react:hermes-android")
     } else {
         implementation jscFlavor
     }
-
-    // Coroutines for async operations (used by LocalDreamModule)
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
-
-    // PDF text extraction (used by PDFExtractorModule)
     implementation("io.legere:pdfiumandroid:1.0.35")
-
-    // LiteRT-LM on-device LLM inference (pinned — do not use latest.release)
     implementation("com.google.ai.edge.litertlm:litertlm-android:0.11.0")
-
-    // Download layer — Room + WorkManager + OkHttp
     def room_version = "2.8.2"
     implementation("androidx.room:room-runtime:$room_version")
     implementation("androidx.room:room-ktx:$room_version")
@@ -188,7 +107,6 @@ dependencies {
     implementation("androidx.work:work-runtime-ktx:2.10.0")
     implementation("androidx.lifecycle:lifecycle-livedata-ktx:2.8.7")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
-
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.robolectric:robolectric:4.13")
     testImplementation("org.mockito:mockito-core:5.11.0")
