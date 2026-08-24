@@ -31,8 +31,8 @@ android {
         applicationId "ai.offgridmobile"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 1
-        versionName "1.0"
+        versionCode 1787609552
+        versionName "0.0.112"
         
         // FIXED: Only this, NO splits block
         ndk {

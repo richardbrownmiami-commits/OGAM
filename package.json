@@ -1,6 +1,6 @@
 {
   "name": "offgrid-mobile",
-  "version": "0.0.111",
+  "version": "0.0.112",
   "private": true,
   "scripts": {
     "preinstall": "mkdir -p ../shared/packages/sync/src ../shared/packages/rag/src ../shared/packages/speech/src shared/packages/sync/src shared/packages/rag/src shared/packages/speech/src && echo '{\"name\":\"@offgrid/sync\",\"version\":\"1.0.0\",\"main\":\"src/index.ts\"}' > ../shared/packages/sync/package.json && echo 'export const startSync=async()=>{};export const stopSync=async()=>{};export default {startSync,stopSync}' > ../shared/packages/sync/src/index.ts && echo '{\"name\":\"@offgrid/rag\",\"version\":\"1.0.0\",\"main\":\"src/index.ts\"}' > ../shared/packages/rag/package.json && echo 'export const queryRag=async()=>[];export default {queryRag}' > ../shared/packages/rag/src/index.ts && echo '{\"name\":\"@offgrid/speech\",\"version\":\"1.0.0\",\"main\":\"src/index.ts\"}' > ../shared/packages/speech/package.json && echo 'export const startSpeech=async()=>{};export const stopSpeech=async()=>{};export default {startSpeech,stopSpeech}' > ../shared/packages/speech/src/index.ts && cp -rf ../shared/packages/* shared/packages/ 2>/dev/null || true",
