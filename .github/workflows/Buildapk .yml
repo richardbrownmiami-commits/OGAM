@@ -10,21 +10,26 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-node@v4
         with:
           node-version: 20
           cache: npm
+
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: 17
+
       - name: Install deps
         run: npm ci --legacy-peer-deps
+
       - name: Build APK
         working-directory: android
-        run: ./gradlew assembleDevDebug --no-daemon
+        run: ./gradlew assembleDebug --no-daemon
+
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: ogam-apk
-          path: android/app/build/outputs/apk/
+          path: android/app/build/outputs/apk/debug/
