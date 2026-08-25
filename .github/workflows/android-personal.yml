@@ -1,0 +1,49 @@
+name: Android Personal APK
+
+on:
+  push:
+    branches:
+      - android-personal
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-apk:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Setup Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android SDK packages
+        run: sdkmanager "platform-tools" "platforms;android-34" "build-tools;34.0.0" "ndk;26.1.10909125"
+
+      - name: Install JavaScript dependencies
+        run: npm ci --legacy-peer-deps
+
+      - name: Build personal release APK
+        working-directory: android
+        run: ./gradlew clean assembleRelease --no-daemon --stacktrace
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: OGAM-Android-Personal
+          path: android/app/build/outputs/apk/release/*.apk
+          if-no-files-found: error
