@@ -1,5 +1,7 @@
 name: Main Build
 on:
+  push:
+    branches: [main]
   workflow_dispatch:
 jobs:
   build:
@@ -56,7 +58,7 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: mr-alfred-apk-${{ steps.ver.outputs.v }}
+          name: ogam-apk-${{ steps.ver.outputs.v }}
           path: android/app/build/outputs/apk/release/*.apk
           if-no-files-found: error
 
