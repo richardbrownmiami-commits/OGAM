@@ -9,22 +9,19 @@ react {
 }
 
 def enableProguardInReleaseBuilds = false
-
 def jscFlavor = 'org.webkit:android-jsc:+'
 
 android {
     ndkVersion rootProject.ext.ndkVersion
     compileSdkVersion rootProject.ext.compileSdkVersion
-
     namespace "com.offgridmobile"
     defaultConfig {
         applicationId "com.offgridmobile"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 1787669298
-        versionName "0.0.113"
+        versionCode 1
+        versionName "1.0"
     }
-
     signingConfigs {
         debug {
             storeFile file('debug.keystore')
@@ -50,4 +47,9 @@ dependencies {
     implementation "com.facebook.react:react-native:+"
 }
 
-apply from: file("../../node_modules/@react-native-community/cli-platform-android/native_modules.gradle"); applyNativeModulesAppBuildGradle(project)
+// UNIVERSAL FIX - works whether file exists or not
+def nativeModulesGradle = file("../../node_modules/@react-native-community/cli-platform-android/native_modules.gradle")
+if (nativeModulesGradle.exists()) {
+    apply from: nativeModulesGradle
+    applyNativeModulesAppBuildGradle(project)
+}
