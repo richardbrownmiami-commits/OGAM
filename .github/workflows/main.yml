@@ -15,7 +15,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: yarn
+          cache: npm
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -23,7 +23,7 @@ jobs:
       - uses: android-actions/setup-android@v3
 
       - name: Install dependencies
-        run: yarn install --frozen-lockfile
+        run: npm install --no-audit --no-fund
 
       - name: Build release APK
         run: |
