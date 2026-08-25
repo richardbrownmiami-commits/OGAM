@@ -2,26 +2,31 @@ apply plugin: "com.android.application"
 apply plugin: "org.jetbrains.kotlin.android"
 apply plugin: "com.facebook.react"
 
-import com.android.build.OutputFile
-
 react {
     autolinkLibrariesWithApp()
 }
 
 def enableProguardInReleaseBuilds = false
+
 def jscFlavor = 'org.webkit:android-jsc:+'
 
 android {
     ndkVersion rootProject.ext.ndkVersion
     compileSdkVersion rootProject.ext.compileSdkVersion
-    namespace "com.offgridmobile"
+    namespace "ai.offgridmobile"
+
     defaultConfig {
-        applicationId "com.offgridmobile"
+        applicationId "ai.offgridmobile"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode 1
         versionName "1.0"
+
+        ndk {
+            abiFilters "armeabi-v7a", "arm64-v8a"
+        }
     }
+
     signingConfigs {
         debug {
             storeFile file('debug.keystore')
@@ -30,6 +35,7 @@ android {
             keyPassword 'android'
         }
     }
+
     buildTypes {
         debug {
             signingConfig signingConfigs.debug
@@ -44,12 +50,4 @@ android {
 
 dependencies {
     implementation fileTree(dir: "libs", include: ["*.jar"])
-    implementation "com.facebook.react:react-native:+"
-}
-
-// UNIVERSAL FIX - works whether file exists or not
-def nativeModulesGradle = file("../../node_modules/@react-native-community/cli-platform-android/native_modules.gradle")
-if (nativeModulesGradle.exists()) {
-    apply from: nativeModulesGradle
-    applyNativeModulesAppBuildGradle(project)
 }
