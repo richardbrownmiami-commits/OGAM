@@ -12,22 +12,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Add rag sync speech
-        run: |
-          mkdir -p ../shared/packages/sync/src ../shared/packages/rag/src ../shared/packages/speech/src
-          mkdir -p shared/packages/sync/src shared/packages/rag/src shared/packages/speech/src
-          for d in ../shared shared; do
-            printf '{"name":"@offgrid/sync","version":"1.0.0","main":"src/index.ts"}\n' > $d/packages/sync/package.json
-            printf '{"name":"@offgrid/rag","version":"1.0.0","main":"src/index.ts"}\n' > $d/packages/rag/package.json
-            printf '{"name":"@offgrid/speech","version":"1.0.0","main":"src/index.ts"}\n' > $d/packages/speech/package.json
-            printf 'export const startSync = async () => {}; export const stopSync = async () => {}; export default { startSync, stopSync };\n' > $d/packages/sync/src/index.ts
-            printf 'export const queryRag = async () => []; export default { queryRag };\n' > $d/packages/rag/src/index.ts
-            printf 'export const startSpeech = async () => {}; export const stopSpeech = async () => {}; export default { startSpeech, stopSpeech };\n' > $d/packages/speech/src/index.ts
-          done
-
       - uses: actions/setup-node@v4
         with:
           node-version: 20
+          cache: yarn
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -35,21 +23,7 @@ jobs:
       - uses: android-actions/setup-android@v3
 
       - name: Install dependencies
-        run: |
-          yarn install
-
-      - name: Align native audio/worklets dependencies
-        run: |
-          yarn add react-native-audio-api@0.12.2 react-native-worklets@0.12.1 --ignore-scripts
-
-      - name: Patch legacy react-native-voice for Android
-        run: |
-          VOICE_GRADLE=node_modules/@react-native-voice/voice/android/build.gradle
-          test -f "$VOICE_GRADLE"
-          sed -i 's/jcenter()/mavenCentral()/g' "$VOICE_GRADLE"
-          if ! grep -q 'compileSdkVersion' "$VOICE_GRADLE"; then
-            printf '\nandroid { compileSdkVersion rootProject.ext.compileSdkVersion }\n' >> "$VOICE_GRADLE"
-          fi
+        run: yarn install --frozen-lockfile
 
       - name: Build release APK
         run: |
