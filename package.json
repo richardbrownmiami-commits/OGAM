@@ -36,7 +36,6 @@
     "@modelcontextprotocol/sdk": "^1.29.0",
     "@offgrid/rag": "file:./shared/packages/rag",
     "@offgrid/speech": "file:./shared/packages/speech",
-    "@offgrid/sync": "file:./shared/packages/sync",
     "@op-engineering/op-sqlite": "^15.2.5",
     "@react-native-async-storage/async-storage": "^2.2.0",
     "@react-native-community/slider": "^5.1.2",
@@ -82,7 +81,7 @@
     "react-native-zeroconf": "^0.14.0",
     "react-native-zip-archive": "7.1.0",
     "text-encoding-polyfill": "^0.6.7",
-    "tweetnacl": "^1.0.3",
+    "tweetnacl": "^1.0.0",
     "tweetnacl-util": "^0.15.1",
     "whisper.rn": "^0.5.5",
     "zustand": "^5.0.10"
