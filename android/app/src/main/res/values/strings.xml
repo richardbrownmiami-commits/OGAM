@@ -1,4 +1,4 @@
 <resources>
-    <string name="app_name">Off Grid AI</string>
-    <string name="process_text_action_label">Copy to Off Grid AI</string>
+    <string name="app_name">OGAM</string>
+    <string name="process_text_action_label">Copy to OGAM</string>
 </resources>
