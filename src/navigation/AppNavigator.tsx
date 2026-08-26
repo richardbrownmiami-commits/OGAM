@@ -3,81 +3,39 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { View, StyleSheet } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import Animated, {
-  useSharedValue,
-  useAnimatedStyle,
-  withSpring,
-} from 'react-native-reanimated';
+import Animated, { useSharedValue, useAnimatedStyle, withSpring } from 'react-native-reanimated';
 import Icon from 'react-native-vector-icons/Feather';
 import { useTheme, useThemedStyles } from '../theme';
 import type { ThemeColors, ThemeShadows } from '../theme';
 import { triggerHaptic } from '../utils/haptics';
 import { useAppStore } from '../stores';
 import {
-  OnboardingScreen,
-  ModelDownloadScreen,
-  HomeScreen,
-  ModelsScreen,
-  ChatScreen,
-  SettingsScreen,
-  ProjectsScreen,
-  ChatsListScreen,
-  ProjectDetailScreen,
-  ProjectEditScreen,
-  ProjectChatsScreen,
-  KnowledgeBaseScreen,
-  DocumentPreviewScreen,
-  DownloadManagerScreen,
-  ModelSettingsScreen,
-  DeviceInfoScreen,
-  StorageSettingsScreen,
-  SecuritySettingsScreen,
-  GalleryScreen,
-  RemoteServersScreen,
-  ProDetailScreen,
-  AboutScreen,
-  ToolsScreen,
+  OnboardingScreen, ModelDownloadScreen, HomeScreen, ModelsScreen, ChatScreen, SettingsScreen,
+  ProjectsScreen, ChatsListScreen, ProjectDetailScreen, ProjectEditScreen, ProjectChatsScreen,
+  KnowledgeBaseScreen, DocumentPreviewScreen, DownloadManagerScreen, ModelSettingsScreen,
+  DeviceInfoScreen, StorageSettingsScreen, SecuritySettingsScreen, RemoteServersScreen,
+  ProDetailScreen, AboutScreen, ToolsScreen,
 } from '../screens';
-import {
-  RootStackParamList,
-  MainTabParamList,
-} from './types';
+import { RootStackParamList, MainTabParamList } from './types';
 import { useRegisteredScreens } from './screenRegistry';
 
 const RootStack = createNativeStackNavigator<RootStackParamList>();
 const Tab = createBottomTabNavigator<MainTabParamList>();
 
-// Animated tab icon with scale spring on focus
 const TAB_ICON_MAP: Record<string, string> = {
-  HomeTab: 'home',
-  ChatsTab: 'message-circle',
-  ProjectsTab: 'folder',
-  ModelsTab: 'cpu',
-  SettingsTab: 'settings',
+  HomeTab: 'home', ChatsTab: 'message-circle', ProjectsTab: 'folder', ModelsTab: 'cpu', SettingsTab: 'settings',
 };
 
 const TabBarIcon: React.FC<{ name: string; focused: boolean }> = ({ name, focused }) => {
   const { colors } = useTheme();
   const tabStyles = useThemedStyles(createTabBarStyles);
   const scale = useSharedValue(focused ? 1.1 : 1);
-
-  useEffect(() => {
-    scale.value = withSpring(focused ? 1.1 : 1, { damping: 15, stiffness: 150 });
-
-  }, [focused]);
-
-  const animatedStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: scale.value }],
-  }));
-
+  useEffect(() => { scale.value = withSpring(focused ? 1.1 : 1, { damping: 15, stiffness: 150 }); }, [focused]);
+  const animatedStyle = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
   return (
     <View style={tabStyles.iconContainer}>
       <Animated.View style={animatedStyle}>
-        <Icon
-          name={TAB_ICON_MAP[name] || 'circle'}
-          size={22}
-          color={focused ? colors.primary : colors.textMuted}
-        />
+        <Icon name={TAB_ICON_MAP[name] || 'circle'} size={22} color={focused ? colors.primary : colors.textMuted} />
       </Animated.View>
       {focused && <View style={tabStyles.focusDot} />}
     </View>
@@ -85,101 +43,36 @@ const TabBarIcon: React.FC<{ name: string; focused: boolean }> = ({ name, focuse
 };
 
 const createTabBarStyles = (colors: ThemeColors, _shadows: ThemeShadows) => ({
-  iconContainer: {
-    alignItems: 'center' as const,
-    justifyContent: 'center' as const,
-  },
-  focusDot: {
-    position: 'absolute' as const,
-    top: -6,
-    width: 4,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: colors.primary,
-  },
+  iconContainer: { alignItems: 'center' as const, justifyContent: 'center' as const },
+  focusDot: { position: 'absolute' as const, top: -6, width: 4, height: 4, borderRadius: 2, backgroundColor: colors.primary },
 });
 
-const mainTabsStyles = StyleSheet.create({
-  container: { flex: 1 },
-});
+const mainTabsStyles = StyleSheet.create({ container: { flex: 1 } });
 
-// Main Tab Navigator
 const MainTabs: React.FC = () => {
   const { colors, shadows } = useTheme();
   const insets = useSafeAreaInsets();
   const bottomInset = Math.max(insets.bottom, 20);
   const tabBarHeight = 60 + bottomInset;
-
   return (
     <View style={mainTabsStyles.container}>
       <Tab.Navigator
         backBehavior="history"
         screenOptions={({ route }) => ({
-          headerShown: false,
-          animation: 'fade',
-          lazy: true,
-          tabBarStyle: {
-            backgroundColor: colors.surface,
-            borderTopColor: colors.border,
-            borderTopWidth: 1,
-            height: tabBarHeight,
-            paddingBottom: bottomInset,
-            paddingTop: 10,
-            ...shadows.medium,
-          },
-          tabBarActiveTintColor: colors.primary,
-          tabBarInactiveTintColor: colors.textMuted,
-          tabBarIcon: ({ focused }) => (
-            <TabBarIcon name={route.name} focused={focused} />
-          ),
-          tabBarLabelStyle: {
-            fontSize: 11,
-            fontWeight: '500' as const,
-          },
+          headerShown: false, animation: 'fade', lazy: true,
+          tabBarStyle: { backgroundColor: colors.surface, borderTopColor: colors.border, borderTopWidth: 1, height: tabBarHeight, paddingBottom: bottomInset, paddingTop: 10, ...shadows.medium },
+          tabBarActiveTintColor: colors.primary, tabBarInactiveTintColor: colors.textMuted,
+          tabBarIcon: ({ focused }) => <TabBarIcon name={route.name} focused={focused} />,
+          tabBarLabelStyle: { fontSize: 11, fontWeight: '500' as const },
         })}
       >
-        <Tab.Screen
-          name="HomeTab"
-          component={HomeScreen}
-          options={{ tabBarLabel: 'Home', tabBarButtonTestID: 'home-tab' }}
-          listeners={() => ({
-            tabPress: () => { triggerHaptic('selection'); },
-          })}
-        />
-        <Tab.Screen
-          name="ChatsTab"
-          component={ChatsListScreen}
-          options={{ tabBarLabel: 'Chats', tabBarButtonTestID: 'chats-tab' }}
-          listeners={() => ({
-            tabPress: () => { triggerHaptic('selection'); },
-          })}
-        />
-        <Tab.Screen
-          name="ProjectsTab"
-          component={ProjectsScreen}
-          options={{ tabBarLabel: 'Projects', tabBarButtonTestID: 'projects-tab' }}
-          listeners={() => ({
-            tabPress: () => { triggerHaptic('selection'); },
-          })}
-        />
-        <Tab.Screen
-          name="ModelsTab"
-          component={ModelsScreen}
-          options={{ tabBarLabel: 'Models', tabBarButtonTestID: 'models-tab' }}
-          listeners={() => ({
-            tabPress: () => { triggerHaptic('selection'); },
-          })}
-        />
-        <Tab.Screen
-          name="SettingsTab"
-          component={SettingsScreen}
-          options={{ tabBarLabel: 'Settings', tabBarButtonTestID: 'settings-tab' }}
-          listeners={() => ({
-            tabPress: () => { triggerHaptic('selection'); },
-          })}
-        />
+        <Tab.Screen name="HomeTab" component={HomeScreen} options={{ tabBarLabel: 'Home', tabBarButtonTestID: 'home-tab' }} listeners={() => ({ tabPress: () => { triggerHaptic('selection'); } })} />
+        <Tab.Screen name="ChatsTab" component={ChatsListScreen} options={{ tabBarLabel: 'Chats', tabBarButtonTestID: 'chats-tab' }} listeners={() => ({ tabPress: () => { triggerHaptic('selection'); } })} />
+        <Tab.Screen name="ProjectsTab" component={ProjectsScreen} options={{ tabBarLabel: 'Projects', tabBarButtonTestID: 'projects-tab' }} listeners={() => ({ tabPress: () => { triggerHaptic('selection'); } })} />
+        <Tab.Screen name="ModelsTab" component={ModelsScreen} options={{ tabBarLabel: 'Models', tabBarButtonTestID: 'models-tab' }} listeners={() => ({ tabPress: () => { triggerHaptic('selection'); } })} />
+        <Tab.Screen name="SettingsTab" component={SettingsScreen} options={{ tabBarLabel: 'Settings', tabBarButtonTestID: 'settings-tab' }} listeners={() => ({ tabPress: () => { triggerHaptic('selection'); } })} />
       </Tab.Navigator>
-    </View >
+    </View>
   );
 };
 
@@ -187,67 +80,31 @@ export const AppNavigator: React.FC = () => {
   const { colors } = useTheme();
   const hasCompletedOnboarding = useAppStore((s) => s.hasCompletedOnboarding);
   const downloadedModels = useAppStore((s) => s.downloadedModels);
-  // Reactive: screens registered at runtime (Pro activation re-runs loadProFeatures)
-  // mount as real routes live, so navigate('McpServers') works without an app restart.
   const registeredScreens = useRegisteredScreens();
-
-  // Determine initial route
   let initialRoute: keyof RootStackParamList = 'Onboarding';
-  if (hasCompletedOnboarding) {
-    initialRoute = downloadedModels.length > 0 ? 'Main' : 'ModelDownload';
-  }
+  if (hasCompletedOnboarding) initialRoute = downloadedModels.length > 0 ? 'Main' : 'ModelDownload';
 
   return (
-      <RootStack.Navigator
-        initialRouteName={initialRoute}
-        screenOptions={{
-          headerShown: false,
-          contentStyle: { backgroundColor: colors.background },
-          animation: 'slide_from_right',
-        }}
-      >
-        <RootStack.Screen name="Onboarding" component={OnboardingScreen} />
-        <RootStack.Screen name="ModelDownload" component={ModelDownloadScreen} />
-        <RootStack.Screen name="Main" component={MainTabs} />
-        <RootStack.Screen name="Chat" component={ChatScreen} />
-        <RootStack.Screen name="ProjectDetail" component={ProjectDetailScreen} />
-        <RootStack.Screen name="ProjectChats" component={ProjectChatsScreen} />
-        <RootStack.Screen
-          name="ProjectEdit"
-          component={ProjectEditScreen}
-          options={{ presentation: 'modal', animation: 'slide_from_bottom' }}
-        />
-        <RootStack.Screen name="KnowledgeBase" component={KnowledgeBaseScreen} />
-        <RootStack.Screen name="DocumentPreview" component={DocumentPreviewScreen} />
-        <RootStack.Screen name="ModelSettings" component={ModelSettingsScreen} />
-        <RootStack.Screen name="RemoteServers" component={RemoteServersScreen} />
-        <RootStack.Screen name="DeviceInfo" component={DeviceInfoScreen} />
-        <RootStack.Screen name="StorageSettings" component={StorageSettingsScreen} />
-        <RootStack.Screen name="SecuritySettings" component={SecuritySettingsScreen} />
-        <RootStack.Screen
-          name="ProDetail"
-          component={ProDetailScreen}
-          options={{ headerShown: false, animation: 'slide_from_bottom' }}
-        />
-        <RootStack.Screen
-          name="About"
-          component={AboutScreen}
-          options={{ headerShown: false }}
-        />
-        <RootStack.Screen name="Tools" component={ToolsScreen} />
-        <RootStack.Screen
-          name="DownloadManager"
-          component={DownloadManagerScreen}
-          options={{ presentation: 'modal', animation: 'slide_from_bottom' }}
-        />
-        <RootStack.Screen
-          name="Gallery"
-          component={GalleryScreen}
-          options={{ presentation: 'modal', animation: 'slide_from_bottom' }}
-        />
-        {registeredScreens.map(s => (
-          <RootStack.Screen key={s.name} name={s.name as any} component={s.component} />
-        ))}
-      </RootStack.Navigator>
+    <RootStack.Navigator initialRouteName={initialRoute} screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.background }, animation: 'slide_from_right' }}>
+      <RootStack.Screen name="Onboarding" component={OnboardingScreen} />
+      <RootStack.Screen name="ModelDownload" component={ModelDownloadScreen} />
+      <RootStack.Screen name="Main" component={MainTabs} />
+      <RootStack.Screen name="Chat" component={ChatScreen} />
+      <RootStack.Screen name="ProjectDetail" component={ProjectDetailScreen} />
+      <RootStack.Screen name="ProjectChats" component={ProjectChatsScreen} />
+      <RootStack.Screen name="ProjectEdit" component={ProjectEditScreen} options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />
+      <RootStack.Screen name="KnowledgeBase" component={KnowledgeBaseScreen} />
+      <RootStack.Screen name="DocumentPreview" component={DocumentPreviewScreen} />
+      <RootStack.Screen name="ModelSettings" component={ModelSettingsScreen} />
+      <RootStack.Screen name="RemoteServers" component={RemoteServersScreen} />
+      <RootStack.Screen name="DeviceInfo" component={DeviceInfoScreen} />
+      <RootStack.Screen name="StorageSettings" component={StorageSettingsScreen} />
+      <RootStack.Screen name="SecuritySettings" component={SecuritySettingsScreen} />
+      <RootStack.Screen name="ProDetail" component={ProDetailScreen} options={{ headerShown: false, animation: 'slide_from_bottom' }} />
+      <RootStack.Screen name="About" component={AboutScreen} options={{ headerShown: false }} />
+      <RootStack.Screen name="Tools" component={ToolsScreen} />
+      <RootStack.Screen name="DownloadManager" component={DownloadManagerScreen} options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />
+      {registeredScreens.map(s => <RootStack.Screen key={s.name} name={s.name as any} component={s.component} />)}
+    </RootStack.Navigator>
   );
 };
