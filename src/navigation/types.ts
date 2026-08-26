@@ -4,15 +4,12 @@ export type RootStackParamList = {
   Onboarding: undefined;
   ModelDownload: undefined;
   Main: NavigatorScreenParams<MainTabParamList> | undefined;
-  // Former ChatsStack
   Chat: { conversationId?: string; projectId?: string };
-  // Former ProjectsStack
   ProjectDetail: { projectId: string };
   ProjectEdit: { projectId?: string };
   ProjectChats: { projectId: string };
   KnowledgeBase: { projectId: string };
   DocumentPreview: { filePath: string; fileName: string; fileSize: number };
-  // Former SettingsStack
   ModelSettings: undefined;
   RemoteServers: undefined;
   DeviceInfo: undefined;
@@ -20,22 +17,19 @@ export type RootStackParamList = {
   SecuritySettings: undefined;
   Sync: undefined;
   Notifications: undefined;
-  // Already in RootStack
   DownloadManager: undefined;
-  Gallery: { conversationId?: string } | undefined;
   ProDetail: undefined;
   About: undefined;
   Tools: undefined;
 };
 
-// Tab navigator — simple, no sub-stacks
 export type MainTabParamList = {
   HomeTab: undefined;
   ChatsTab: undefined;
   ProjectsTab: undefined;
   ModelsTab:
     | {
-        initialTab?: 'text' | 'image' | 'voice' | 'transcription';
+        initialTab?: 'text' | 'voice' | 'transcription';
         repairModelId?: string;
         initialSearchQuery?: string;
       }
