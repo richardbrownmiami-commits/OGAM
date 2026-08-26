@@ -66,3 +66,4 @@ jobs:
           retention-days: 14
 
 # Triggered explicitly for the clean Android APK validation pass.
+# CI trigger marker: clean-core-android APK build verification
