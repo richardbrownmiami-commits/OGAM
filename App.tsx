@@ -30,10 +30,8 @@ import { useAppState } from './src/hooks/useAppState';
 import { useDownloadStore } from './src/stores/downloadStore';
 import { ErrorBoundary } from './src/components/ErrorBoundary';
 
-LogBox.ignoreAllLogs(); // Suppress all logs
+LogBox.ignoreAllLogs();
 
-// Dev-only: mirror logger output into the in-app Debug Logs viewer. The whole block
-// is behind __DEV__, so release builds keep main's no-op logger (zero logging cost).
 if (__DEV__) {
   const fmt = (a: unknown): string => {
     if (a instanceof Error) return `${a.name}: ${a.message}`;
@@ -44,10 +42,8 @@ if (__DEV__) {
   const tap = (level: 'log' | 'warn' | 'error') => (...args: unknown[]) => {
     base[level](...args);
     const message = args.map(fmt).join(' ');
-    try {
-      useDebugLogsStore.getState().addLog({ timestamp: Date.now(), level, message });
-    } catch { /* never break logging */ }
-    try { appendDebugLine(level, message); } catch { /* never break logging */ }
+    try { useDebugLogsStore.getState().addLog({ timestamp: Date.now(), level, message }); } catch {}
+    try { appendDebugLine(level, message); } catch {}
   };
   logger.log = tap('log');
   logger.warn = tap('warn');
@@ -62,16 +58,8 @@ function App() {
   const setDeviceInfo = useAppStore((s) => s.setDeviceInfo);
   const setModelRecommendation = useAppStore((s) => s.setModelRecommendation);
   const setDownloadedModels = useAppStore((s) => s.setDownloadedModels);
-  const setDownloadedImageModels = useAppStore((s) => s.setDownloadedImageModels);
-
   const { colors, isDark } = useTheme();
-
-  const {
-    isEnabled: authEnabled,
-    isLocked,
-    setLocked,
-    setLastBackgroundTime,
-  } = useAuthStore();
+  const { isEnabled: authEnabled, isLocked, setLocked, setLastBackgroundTime } = useAuthStore();
 
   const reattachTextDownloadRecovery = useCallback(async () => {
     const restoredIds = await modelManager.restoreInProgressDownloads();
@@ -82,9 +70,7 @@ function App() {
         async () => {
           const models = await modelManager.getDownloadedModels();
           setDownloadedModels(models);
-          useDownloadStore.getState().remove(
-            useDownloadStore.getState().downloadIdIndex[downloadId] ?? '',
-          );
+          useDownloadStore.getState().remove(useDownloadStore.getState().downloadIdIndex[downloadId] ?? '');
         },
         (error: Error) => {
           logger.error('[App] Restored text download failed:', error);
@@ -103,53 +89,29 @@ function App() {
     }, [authEnabled, setLastBackgroundTime, setLocked]),
     onForeground: useCallback(() => {
       hydrateDownloadStore()
-        .catch((error) => {
-          logger.error('[App] Failed to hydrate download store on foreground:', error);
-        })
-        .finally(() => {
-          reattachTextDownloadRecovery().catch((error) => {
-            logger.error('[App] Failed to restore text downloads on foreground:', error);
-          });
-        });
+        .catch((error) => logger.error('[App] Failed to hydrate download store on foreground:', error))
+        .finally(() => reattachTextDownloadRecovery().catch((error) => logger.error('[App] Failed to restore text downloads on foreground:', error)));
     }, [reattachTextDownloadRecovery]),
   });
 
   const ensureAppStoreHydrated = useCallback(async () => {
     const persistApi = useAppStore.persist;
     if (!persistApi?.hasHydrated || !persistApi.rehydrate) return;
-    if (!persistApi.hasHydrated()) {
-      await persistApi.rehydrate();
-    }
+    if (!persistApi.hasHydrated()) await persistApi.rehydrate();
   }, []);
 
   const recoverDownloadState = useCallback(() => {
     (async () => {
       initActiveDownloadPersistence();
-      await hydrateDownloadStore().catch((error) => {
-        logger.error('[App] Failed to hydrate download store during startup:', error);
-      });
+      await hydrateDownloadStore().catch((error) => logger.error('[App] Failed to hydrate download store during startup:', error));
       await reattachTextDownloadRecovery();
       registerCoreDownloadProviders();
-      await restoreQueuedDownloads().catch((error) => {
-        logger.error('[App] Failed to restore queued downloads during startup:', error);
-      });
-
-      const activeImageModelIds = new Set(
-        Object.values(useDownloadStore.getState().downloads)
-          .filter(e => e.modelType === 'image')
-          .map(e => e.modelId.replace('image:', '')),
-      );
-      await modelManager.reconcileFinishedImageDownloads(activeImageModelIds).catch((error) => {
-        logger.error('[App] Image model reconciliation failed:', error);
-      });
+      await restoreQueuedDownloads().catch((error) => logger.error('[App] Failed to restore queued downloads during startup:', error));
       logger.log('[BOOT] refresh model lists');
-      const { textModels, imageModels } = await modelManager.refreshModelLists();
+      const { textModels } = await modelManager.refreshModelLists();
       setDownloadedModels(textModels);
-      setDownloadedImageModels(imageModels);
-    })().catch((error) => {
-      logger.error('[App] Download-state recovery failed:', error);
-    });
-  }, [setDownloadedModels, setDownloadedImageModels]);
+    })().catch((error) => logger.error('[App] Download-state recovery failed:', error));
+  }, [setDownloadedModels, reattachTextDownloadRecovery]);
 
   const initializeApp = useCallback(async () => {
     try {
@@ -157,30 +119,20 @@ function App() {
       await ensureAppStoreHydrated();
       startLoadPolicySync();
       recoverDownloadState();
-
       logger.log('[BOOT] device info');
       const deviceInfo = await hardwareService.getDeviceInfo();
       setDeviceInfo(deviceInfo);
-
       const recommendation = hardwareService.getModelRecommendation();
       setModelRecommendation(recommendation);
-
       logger.log('[BOOT] modelManager.initialize');
       await modelManager.initialize();
       await modelManager.cleanupMMProjEntries();
-
-      const { textModels, imageModels } = await modelManager.refreshModelLists();
+      const { textModels } = await modelManager.refreshModelLists();
       setDownloadedModels(textModels);
-      setDownloadedImageModels(imageModels);
-
       logger.log('[BOOT] auth passphrase check');
       const hasPassphrase = await authService.hasPassphrase();
-      if (hasPassphrase && authEnabled) {
-        setLocked(true);
-      }
-
+      if (hasPassphrase && authEnabled) setLocked(true);
       ragService.ensureReady().catch((err) => logger.error('Failed to initialize RAG service on startup', err));
-
       logger.log('[BOOT] startup complete');
       setIsInitializing(false);
       useWhisperStore.getState().refreshPresentModels();
@@ -188,72 +140,22 @@ function App() {
       logger.error('[App] Error initializing app:', error);
       setIsInitializing(false);
     }
-  }, [
-    authEnabled,
-    ensureAppStoreHydrated,
-    recoverDownloadState,
-    setDeviceInfo,
-    setDownloadedImageModels,
-    setDownloadedModels,
-    setLocked,
-    setModelRecommendation,
-  ]);
+  }, [authEnabled, ensureAppStoreHydrated, recoverDownloadState, setDeviceInfo, setDownloadedModels, setLocked, setModelRecommendation]);
 
-  useEffect(() => {
-    initializeApp();
-  }, [initializeApp]);
-
-  const handleUnlock = useCallback(() => {
-    setLocked(false);
-  }, [setLocked]);
+  useEffect(() => { initializeApp(); }, [initializeApp]);
+  const handleUnlock = useCallback(() => setLocked(false), [setLocked]);
 
   if (isInitializing) {
-    return (
-      <GestureHandlerRootView style={[styles.flex, { backgroundColor: colors.background }]}>
-        <SafeAreaProvider>
-          <View style={[styles.loadingContainer, { backgroundColor: colors.background }]} testID="app-loading">
-            <SystemBars style={isDark ? 'light' : 'dark'} />
-            <ActivityIndicator size="large" color={colors.primary} />
-          </View>
-        </SafeAreaProvider>
-      </GestureHandlerRootView>
-    );
+    return <GestureHandlerRootView style={[styles.flex, { backgroundColor: colors.background }]}><SafeAreaProvider><View style={[styles.loadingContainer, { backgroundColor: colors.background }]} testID="app-loading"><SystemBars style={isDark ? 'light' : 'dark'} /><ActivityIndicator size="large" color={colors.primary} /></View></SafeAreaProvider></GestureHandlerRootView>;
   }
-
   if (authEnabled && isLocked) {
-    return (
-      <GestureHandlerRootView style={[styles.flex, { backgroundColor: colors.background }]} testID="app-locked">
-        <SafeAreaProvider>
-          <SystemBars style={isDark ? 'light' : 'dark'} />
-          <LockScreen onUnlock={handleUnlock} />
-        </SafeAreaProvider>
-      </GestureHandlerRootView>
-    );
+    return <GestureHandlerRootView style={[styles.flex, { backgroundColor: colors.background }]} testID="app-locked"><SafeAreaProvider><SystemBars style={isDark ? 'light' : 'dark'} /><LockScreen onUnlock={handleUnlock} /></SafeAreaProvider></GestureHandlerRootView>;
   }
-
   return (
     <GestureHandlerRootView style={styles.flex}>
       <SafeAreaProvider>
         <SystemBars style={isDark ? 'light' : 'dark'} />
-        <NavigationContainer
-          theme={{
-            dark: isDark,
-            colors: {
-              primary: colors.primary,
-              background: colors.background,
-              card: colors.surface,
-              text: colors.text,
-              border: colors.border,
-              notification: colors.primary,
-            },
-            fonts: {
-              regular: { fontFamily: 'System', fontWeight: '400' },
-              medium: { fontFamily: 'System', fontWeight: '500' },
-              bold: { fontFamily: 'System', fontWeight: '700' },
-              heavy: { fontFamily: 'System', fontWeight: '900' },
-            },
-          }}
-        >
+        <NavigationContainer theme={{ dark: isDark, colors: { primary: colors.primary, background: colors.background, card: colors.surface, text: colors.text, border: colors.border, notification: colors.primary }, fonts: { regular: { fontFamily: 'System', fontWeight: '400' }, medium: { fontFamily: 'System', fontWeight: '500' }, bold: { fontFamily: 'System', fontWeight: '700' }, heavy: { fontFamily: 'System', fontWeight: '900' } } }}>
           <AppNavigator />
         </NavigationContainer>
       </SafeAreaProvider>
@@ -263,21 +165,9 @@ function App() {
 
 const styles = StyleSheet.create({
   flex: { flex: 1 },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
+  loadingContainer: { flex: 1, alignItems: 'center', justifyContent: 'center' },
 });
 
-function AppWithProviders() {
-  return (
-    <ErrorBoundary>
-      <KeyboardProvider>
-        <App />
-      </KeyboardProvider>
-    </ErrorBoundary>
-  );
+export default function AppRoot() {
+  return <ErrorBoundary><KeyboardProvider><App /></KeyboardProvider></ErrorBoundary>;
 }
-
-export default AppWithProviders;
