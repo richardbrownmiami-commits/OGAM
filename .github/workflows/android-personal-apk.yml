@@ -64,3 +64,5 @@ jobs:
           path: android/app/build/outputs/apk/release/*.apk
           if-no-files-found: error
           retention-days: 14
+
+# Triggered explicitly for the clean Android APK validation pass.
