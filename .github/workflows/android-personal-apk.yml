@@ -3,23 +3,17 @@ name: Android Personal APK
 on:
   workflow_dispatch:
   push:
-    branches: [main, clean-core-android]
-    paths:
-      - 'android/**'
-      - 'src/**'
-      - 'shared/**'
-      - 'package.json'
-      - 'package-lock.json'
-      - 'yarn.lock'
-      - '.github/workflows/android-personal-apk.yml'
+    branches:
+      - clean-core-android
+      - main
+
+permissions:
+  contents: read
 
 jobs:
   build-apk:
     name: Build personal Android APK (ARM64)
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -40,30 +34,23 @@ jobs:
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
 
-      - name: Repair and validate npm lockfile
-        run: |
-          npm install --package-lock-only --ignore-scripts --no-audit --no-fund
-          npm ci --ignore-scripts --no-audit --no-fund
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
 
-      - name: Run project postinstall patches
+      - name: Run postinstall patches
         run: npm run postinstall --if-present
 
-      - name: Build release APK for Redmi 9 class ARM64 devices
+      - name: Build ARM64 release APK
         working-directory: android
         run: ./gradlew clean assembleRelease -PreactNativeArchitectures=arm64-v8a --no-daemon --stacktrace
 
-      - name: Verify APK
-        run: |
-          test -n "$(find android/app/build/outputs/apk/release -type f -name '*.apk' -print -quit)"
-          find android/app/build/outputs/apk/release -type f -name '*.apk' -print
+      - name: Verify APK exists
+        run: test -n "$(find android/app/build/outputs/apk/release -type f -name '*.apk' -print -quit)"
 
-      - name: Upload APK artifact
+      - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: OGAM-personal-arm64-apk
           path: android/app/build/outputs/apk/release/*.apk
           if-no-files-found: error
           retention-days: 14
-
-# Triggered explicitly for the clean Android APK validation pass.
-# CI trigger marker: clean-core-android APK build verification
