@@ -40,13 +40,13 @@ jobs:
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
 
-      - name: Install dependencies
+      - name: Repair and validate npm lockfile
         run: |
-          if [ -f package-lock.json ]; then
-            npm ci
-          else
-            npm install --no-audit --no-fund
-          fi
+          npm install --package-lock-only --ignore-scripts --no-audit --no-fund
+          npm ci --ignore-scripts --no-audit --no-fund
+
+      - name: Run project postinstall patches
+        run: npm run postinstall --if-present
 
       - name: Build release APK for Redmi 9 class ARM64 devices
         working-directory: android
