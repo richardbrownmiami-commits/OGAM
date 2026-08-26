@@ -3,7 +3,7 @@ name: Android Personal APK
 on:
   workflow_dispatch:
   push:
-    branches: [main]
+    branches: [main, clean-core-android]
     paths:
       - 'android/**'
       - 'src/**'
